@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege, stated rather than inherited: the job only ever reads the
+# code. A pull request from a stranger runs with this too, so a fork cannot
+# use the workflow to write to the repository.
+permissions:
+  contents: read
+
 jobs:
   selftest:
     name: selftest (Python ${{ matrix.python }})

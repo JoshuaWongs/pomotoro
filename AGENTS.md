@@ -24,6 +24,20 @@ install.
 python pomodoro.py
 ```
 
+### Command line
+
+| Flag | What it does |
+|---|---|
+| *(none)* | Run him. If a copy is already running, bring that one to the front and exit. |
+| `--force` | Start anyway, even with a copy already running. Useful for testing; two of them in the same corner share one `state.json`, so do not leave it that way. |
+| `--make-icon` | Regenerate `totoro.ico` from the sprite and print the path. |
+| `--selftest` | Run the fast checks and exit. |
+
+Note what the bare command does **not** do: it writes no shortcut, no registry
+key and no Startup entry. On a normal run the only file it creates is
+`state.json` beside the code, plus the sound files in a private temp
+directory. Keep it that way.
+
 ## Tests
 
 Both should pass before and after any change.

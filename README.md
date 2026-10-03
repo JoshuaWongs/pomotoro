@@ -141,9 +141,15 @@ Worth saying plainly, since you are being asked to download and run a script:
   the project. It cannot phone home because it has nothing to phone with.
 - No registry writes, no Startup entries, no shortcuts created. If you want him
   at login you make that shortcut yourself.
-- The only thing he writes is `state.json` next to the code, which remembers
-  which way his arrow points. Delete it any time.
-- No `eval`, `exec`, `subprocess` or `pickle` anywhere.
+- He writes two things and nothing else: `state.json` beside the code, which
+  remembers which way his arrow points and can be deleted any time, and the two
+  short sound files, in a private temporary directory made fresh each run.
+- No `eval`, `exec`, `subprocess` or `pickle` anywhere, and no code is loaded
+  at runtime from anywhere.
+- The Windows calls he does make are all through `ctypes`, and all of them are
+  about placing a window: the usable screen area, the display scaling, the
+  stacking order, and a named lock so a second copy bows out instead of
+  stacking up in the corner.
 
 Uninstalling is deleting the folder.
 
