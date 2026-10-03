@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+
+# Runtime state: which way his arrow points. Local to each machine.
+state.json
+
+# Design notes kept out of the published repo on purpose.
+docs/superpowers/
+
+# Scratch output from building the demo.
+assets/frames/
+*.mp4
