@@ -19,9 +19,9 @@ runs out he loses his temper and bursts into camphor leaves.
 - **Windows.** The see-through background, the window layering, the sound and
   the single-copy check are all Windows-specific. He will not run on macOS or
   Linux.
-- **Python 3.9 or newer**, which is probably already on your machine. The
-  installer from [python.org](https://www.python.org/downloads/) includes
-  everything needed.
+- **Python 3.9 or newer.** Windows does not come with it: if typing `python`
+  opens the Microsoft Store, it is not installed yet. The installer from
+  [python.org](https://www.python.org/downloads/) includes everything needed.
 
 Nothing else. No `pip install`, no dependencies, no build step. The whole thing
 is the Python standard library.
@@ -31,13 +31,17 @@ is the Python standard library.
 ```
 git clone https://github.com/JoshuaWongs/pomotoro.git
 cd pomotoro
-python pomodoro.py
+py pomodoro.py
 ```
 
 He appears in the bottom-right corner. That is the entire setup.
 
-To run him without a console window hanging around, use `pythonw` instead of
-`python`.
+`py` is the launcher the python.org installer adds, and it works even though
+that installer leaves Python off your PATH by default. If Python is on your
+PATH, `python pomodoro.py` works too.
+
+To run him without a console window hanging around, use `pyw` (or `pythonw`)
+instead.
 
 <details>
 <summary>Rather hand it to an AI agent than read instructions?</summary>
@@ -81,6 +85,10 @@ anywhere on it to pause, click again to carry on.
 running. It throws the timer away and puts him back to the standard screen: 50
 minutes, no task. Escape does the same.
 
+**Putting him away.** Right-click him while no timer is running and he closes.
+During a timer a right-click does nothing, so a stray one cannot throw a
+session away; stop the timer with the circular arrow first.
+
 **When it finishes.** He loses his temper. He comes to the front of everything,
 the clock face vanishes, his brows crash down, and over a couple of seconds he
 swells by about a third while turning steadily red and shaking harder. Then he
@@ -122,11 +130,13 @@ again and the copy already running comes to the front**, arrow up, ready to
 use. A second copy never starts.
 
 That makes a shortcut into a button for him. Create one pointing at
-`pythonw pomodoro.py`, pin it to your taskbar, and clicking it fetches him
-whenever he is buried. `totoro.ico` is in the repo for the shortcut's icon — it
-is drawn wider than his true proportions on purpose, because he is a tall
-narrow shape and at honest proportions he looked thinner than everything else
-on the taskbar.
+`pyw "C:\full\path\to\pomotoro\pomodoro.py"` (right-click the desktop, then
+New, then Shortcut). Use the full path: a shortcut does not start in the repo
+folder, so a bare `pomodoro.py` will not be found. Pin it to your taskbar, and
+clicking it fetches him whenever he is buried. `totoro.ico` is in the repo for
+the shortcut's icon — it is drawn wider than his true proportions on purpose,
+because he is a tall narrow shape and at honest proportions he looked thinner
+than everything else on the taskbar.
 
 To have him appear at login, put a shortcut in your Startup folder: press
 Windows+R, type `shell:startup`, press Enter, and drop it in there. **He does
@@ -136,22 +146,24 @@ not do this himself** — see below.
 
 Worth saying plainly, since you are being asked to download and run a script:
 
-- No dependencies. 16 standard-library modules and nothing else.
+- No dependencies. 19 standard-library modules and nothing else.
 - **No network access of any kind.** There is no HTTP, socket or URL code in
   the project. It cannot phone home because it has nothing to phone with.
 - No registry writes, no Startup entries, no shortcuts created. If you want him
   at login you make that shortcut yourself.
 - He writes two things and nothing else: `state.json` beside the code, which
   remembers which way his arrow points and can be deleted any time, and the two
-  short sound files, in a private temporary directory made fresh each run.
+  short sound files, in a private temporary folder made fresh each run. That
+  folder is deleted when he closes, or, if Windows shut him down first, the
+  next time he starts.
 - No `eval`, `exec`, `subprocess` or `pickle` anywhere, and no code is loaded
   at runtime from anywhere.
 - The Windows calls he does make are all through `ctypes`, and all of them are
   about placing a window: the usable screen area, the display scaling, the
-  stacking order, and a named lock so a second copy bows out instead of
-  stacking up in the corner.
+  stacking order, and a named lock and signal so a second copy calls the first
+  one forward and bows out instead of stacking up in the corner.
 
-Uninstalling is deleting the folder.
+Uninstalling is right-clicking him to close him, then deleting the folder.
 
 ## Sessions are not recorded
 
@@ -193,13 +205,14 @@ bitmap font, the sprite geometry, the icon container, the synthesised sounds,
 and that the widget still builds — a missing colour or a typo in the drawing
 code is invisible to every other check and only shows up on launch.
 
-The second has 20 sections and drives real clicks at real coordinates: pausing,
+The second has 20 sections and feeds clicks at real on-screen coordinates
+through his click handler: pausing,
 resetting, mashing the buttons in random order, the caret landing where you
 clicked, the progress slice agreeing with the digits to within a twentieth of a
 degree, the beeps not drifting, and the tantrum leaving nothing behind.
 
-**What the badge covers.** CI runs the self-test on Python 3.9, 3.11 and 3.13
-on Windows. It does not run `test_timer.py`, which measures beep timing against
+**What the badge covers.** CI runs the self-test on Python 3.9, 3.11, 3.13 and
+3.14 on Windows. It does not run `test_timer.py`, which measures beep timing against
 the wall clock and would flake on a shared machine, and it skips the one check
 that needs a real sound card. Those two run locally.
 

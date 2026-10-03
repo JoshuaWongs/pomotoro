@@ -314,9 +314,12 @@ def load_state():
     # mark, and json.load reads that as a syntax error and loses the settings.
     try:
         with open(STATE_FILE, encoding="utf-8-sig") as fh:
-            return json.load(fh)
+            state = json.load(fh)
     except (OSError, ValueError):
         return {}
+    # valid JSON is not always an object: a hand-edited "[]" used to crash
+    # him on launch, so anything but a dict counts as no settings at all
+    return state if isinstance(state, dict) else {}
 
 
 def save_state(**kw):
@@ -402,6 +405,7 @@ def _boom_wav():
 _SOUNDS = {}
 _SOUND_DIR = None
 _SOUND_ERROR = None            # the tests read this; failures used to vanish
+SOUND_PREFIX = "pomotoro-sounds-"
 
 
 def _sound_file(name, make):
@@ -414,13 +418,17 @@ def _sound_file(name, make):
     The file goes in a directory private to this process rather than under a
     predictable name in the shared temp folder, so nothing else can swap the
     sound out from under PlaySound. It deliberately outlives every beep:
-    PlaySound re-reads the file asynchronously on each one.
+    PlaySound re-reads the file asynchronously on each one. It is removed at
+    exit; a run that never reaches exit is swept up by the next launch.
     """
     global _SOUND_DIR
     if name not in _SOUNDS:
+        import atexit
+        import shutil
         import tempfile
         if _SOUND_DIR is None:
-            _SOUND_DIR = tempfile.mkdtemp(prefix="pomodoro-")
+            _SOUND_DIR = tempfile.mkdtemp(prefix=SOUND_PREFIX)
+            atexit.register(shutil.rmtree, _SOUND_DIR, True)  # ignore_errors
         path = os.path.join(_SOUND_DIR, f"{name}.wav")
         with open(path, "wb") as fh:
             fh.write(make())
@@ -439,6 +447,22 @@ def _play(name, make):
         _SOUND_ERROR = None
     except Exception as exc:
         _SOUND_ERROR = exc
+
+
+def sweep_stale_sounds():
+    """Delete sound folders left by runs that never reached their atexit.
+
+    Shutting Windows down or ending him in Task Manager skips the clean-up in
+    _sound_file, and each such run used to leave a folder in %TEMP%. Only the
+    copy holding the single-instance lock calls this, so none of these folders
+    belongs to a live copy.
+    """
+    import glob
+    import shutil
+    import tempfile
+    pattern = os.path.join(glob.escape(tempfile.gettempdir()), SOUND_PREFIX + "*")
+    for path in glob.glob(pattern):
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def play_beep():
@@ -475,7 +499,7 @@ def alarm(stop):
 
 
 def work_area():
-    """The desktop minus the taskbar, so the gorilla never hides under it."""
+    """The desktop minus the taskbar, so he never hides under it."""
     class R(ctypes.Structure):
         _fields_ = [("l", ctypes.c_long), ("t", ctypes.c_long),
                     ("r", ctypes.c_long), ("b", ctypes.c_long)]
@@ -691,6 +715,7 @@ class Totoro:
         self.tiny = max(1, round(self.big * 0.34))
 
         self.canvas.bind("<Button-1>", self.click)
+        self.canvas.bind("<Button-3>", self.quit)
         root.bind("<Key>", self.key)
         self.apply_layer()
         self.blink()
@@ -951,6 +976,17 @@ class Totoro:
                 self.state = RUNNING
                 self.ends_at = time.monotonic() + self.left
             self.last_paint = None
+
+    def quit(self, ev=None):
+        """Right-click puts him away -- but only between timers.
+
+        He has no frame, no taskbar button and no close box, so without this
+        the only way out was Task Manager. Mid-timer a stray right-click would
+        throw the session away, so there it does nothing; the reset arrow
+        comes first.
+        """
+        if self.state == IDLE:
+            self.root.destroy()
 
     def focus_field(self, which, at=None):
         self.editing = which
@@ -1274,7 +1310,7 @@ def selftest():
     grid = build_sprite()
     assert len(grid) == GRID_H and len(grid[0]) == GRID_W
     assert set("".join(grid)) <= set(PALETTE), "sprite uses a colour not in the palette"
-    # the clock face has to land on the gorilla, not hang off him
+    # the clock face has to land on him, not hang off him
     for ang in range(0, 360, 15):
         x = int(round(DISC_CX + (DISC_R + 1.5) * math.cos(math.radians(ang))))
         y = int(round(DISC_CY + (DISC_R + 1.5) * math.sin(math.radians(ang))))
@@ -1292,7 +1328,8 @@ def selftest():
                           ('"' + "W" * 16 + '"', -0.08, 2),
                           ("W" * 14, -0.54, 2)):
         got = fit_px(text, R, dyf * R, px)
-        assert F.text_width(text, got) <= chord_room(R, dyf * R),             f"{text!r} still overflows the disc at size {got}"
+        assert F.text_width(text, got) <= chord_room(R, dyf * R), \
+            f"{text!r} still overflows the disc at size {got}"
     assert chord_room(10, 0) > chord_room(10, 8), "a circle narrows towards the rim"
     assert chord_room(10, 99) == 0, "past the rim there is no room at all"
 
@@ -1304,11 +1341,30 @@ def selftest():
     keep, STATE_FILE = STATE_FILE, os.path.join(tempfile.gettempdir(),
                                                 "pomodoro_st.json")
     try:
+        # valid JSON that is not an object used to crash him on launch
+        with open(STATE_FILE, "w", encoding="utf-8") as fh:
+            fh.write("[]")
+        assert load_state() == {}, "a non-object state.json must read as empty"
         w = Totoro(root)
         for st in (IDLE, RUNNING, PAUSED, DONE):
             w.state = st
             w.repaint()
         root.update()
+        # right-click is the only way to close him, and must never fire
+        # mid-timer, where a stray click would throw the session away
+        assert w.canvas.bind("<Button-3>"), "right-click is not bound"
+        closed = []
+        real_destroy = root.destroy
+        root.destroy = lambda: closed.append(True)
+        try:
+            w.state = RUNNING
+            w.quit()
+            assert not closed, "right-click closed him with a timer running"
+            w.state = IDLE
+            w.quit()
+            assert closed, "right-click while idle did not close him"
+        finally:
+            root.destroy = real_destroy
         # the window has to hold him at full swell, or he bursts out of his own
         # edges. The padding and the sprite size used to be worked out by two
         # separate sums that agreed only while SCALE * GROW_TO landed on a
@@ -1329,7 +1385,8 @@ def selftest():
     for name, by in (("pin", 38), ("reset", 47)):
         for dy in (-2, 2):
             for dx in (-2, 2):
-                assert grid[by + dy][37 + dx] != ".",                     f"the {name} button hangs off the body at corner {(dx, dy)}"
+                assert grid[by + dy][37 + dx] != ".", \
+                    f"the {name} button hangs off the body at corner {(dx, dy)}"
 
     # a second copy has to bow out, or two of him stack in the corner. Only the
     # second call is asserted: the widget may well be running while this does.
@@ -1380,11 +1437,14 @@ def main():
     if "--make-icon" in sys.argv:
         print(write_icon(os.path.join(HERE, "totoro.ico")))
         return
-    if already_running() and "--force" not in sys.argv:
+    running = already_running()
+    if running and "--force" not in sys.argv:
         # Opening the shortcut again is how you summon him: the copy already
         # running comes to the front, and this one bows out.
         summon_running_copy()
         return
+    if not running:
+        sweep_stale_sounds()        # the lock is ours, so no live copy owns them
     sharpen_on_scaled_displays()
     root = tk.Tk()
     Totoro(root)

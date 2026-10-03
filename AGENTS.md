@@ -24,6 +24,9 @@ install.
 python pomodoro.py
 ```
 
+Right-clicking him while no timer is running closes him. He has no frame or
+taskbar button, so that is the only way out short of ending the process.
+
 ### Command line
 
 | Flag | What it does |
@@ -53,7 +56,8 @@ synthesis, and that the widget builds at all. A missing colour or a typo in the
 drawing code is invisible to every other check and only shows up on launch,
 which is why the last thing it does is construct the real widget.
 
-`test_timer.py` has 20 sections and drives real clicks at real coordinates.
+`test_timer.py` has 20 sections and feeds clicks at real on-screen coordinates
+through the click handler.
 It opens windows while it runs. It reports `FAILURES: 0` on success — check
 for that line, because an import-time crash can otherwise look like a pass.
 

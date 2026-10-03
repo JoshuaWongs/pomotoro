@@ -41,9 +41,9 @@ occasionally a file lock landing exactly on a write.
 Nothing is installed and nothing goes online. It runs on the Python already on
 the machine, standard library only.
 
-Two shortcuts exist: one in the Startup folder so he appears at login, one
-pinned to the taskbar. The desktop shortcut was deleted once the taskbar one
-was pinned, which is fine — they are independent copies.
+On the machine he was built on, two shortcuts launch him: one in the Startup
+folder so he appears at login, one pinned to the taskbar. Both were made by
+hand. The program itself creates neither.
 
 ## The timer itself
 
@@ -74,6 +74,10 @@ his brows crash down, and over a couple of seconds he swells by about a third
 while reddening and shaking harder. Then he bursts into camphor
 leaves, acorns and soot sprites — the three things he is associated with in the
 film. Clicking him or pressing Return cuts it short.
+
+**Quitting.** Right-click him while idle. He has no frame, taskbar button or
+close box, so before this the only way out was Task Manager. Mid-timer the
+right-click is ignored, so a stray one cannot throw a session away.
 
 **The chain.** Finishing a focus block loads the break without starting it: a
 break is a fifth of the block, so 50 gives 10 and 25 gives 5. Finishing the
@@ -115,7 +119,7 @@ The lettering is a 5x7 pixel alphabet written by hand in font5x7.py. Windows
 ships no pixel font, and a normal typeface spoiled the retro look. Bold is done
 by smearing each stroke one pixel sideways, the usual trick for bitmap type.
 
-**Display scaling.** The screen here runs at 200%. Handling that ourselves and
+**Display scaling.** The machine he was built on runs at 200%. Handling that ourselves and
 then multiplying the sprite by a whole number keeps the pixels square. Letting
 Windows scale the window instead ran it through a blur filter, which is the one
 thing pixel art must never get.
@@ -127,8 +131,11 @@ the other icons on the taskbar.
 ## Sound
 
 A beep every half second from the moment the timer ends until he bursts, then a
-low crunch as he does. Both are synthesised into a WAV at startup and played
-from a temp file.
+low crunch as he does. Both are synthesised into a WAV the first time they play
+and kept in a temp folder for the rest of the run. The folder is deleted on
+exit. A run that never reaches exit -- Windows shutting down, or Task Manager --
+leaves it behind, so each launch that wins the single-copy lock sweeps up any
+it finds. Before that, every such run left one more folder in %TEMP%.
 
 The beep pitch and spacing were measured from the video that inspired this: a
 single 880 Hz tone about 42 ms long, once every 500 ms. Steady, not a triple.
@@ -207,7 +214,8 @@ font, the sounds, the sprite proportions, and that the widget still builds — a
 missing colour or a typo in the drawing code is invisible to everything else
 and only shows up on launch.
 
-test_timer.py has 20 sections and drives real clicks at real coordinates. The
+test_timer.py has 20 sections and feeds clicks at real on-screen coordinates
+through the click handler. The
 ones worth knowing about: the progress slice must match the clock to within a
 twentieth of a degree and must show colour from the first second; the beeps
 must not drift; he must come back from the tantrum with nothing left on screen
