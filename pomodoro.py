@@ -878,20 +878,39 @@ class Totoro:
             self.rect(x, y, x + px * 2, y + px, fill, outline="")
             x += px * 4
 
-    def corner_button(self, name, y_sprite, glyph, lit, x_sprite=37):
-        """One of the small square buttons clipped to his side.
-
-        x_sprite 37 is his right flank, 7 the matching spot on his left. The
-        body spans columns 4 to 40 on the button row, so both sit on him.
-        """
+    def corner_button(self, name, y_sprite, glyph, lit):
+        """One of the small square buttons clipped to his right side."""
         s = max(2, SCALE)
-        gx, gy = self.ox + x_sprite * SCALE, self.oy + y_sprite * SCALE
+        gx, gy = self.ox + 37 * SCALE, self.oy + y_sprite * SCALE
         self.rect(gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2,
                   CREAM if lit else "#5a636e", outline=DISC_EDGE,
                   width=max(1, SCALE // 4))
         px = max(1, s // 2)
         self.label(glyph, gy - F.H * px / 2, px, INK if lit else CREAM, cx=gx)
         self.hits[name] = (gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2)
+
+    def exit_button(self):
+        """A drawn cross on his left flank, level with the layer arrow.
+
+        Drawn rather than lettered, for the same reason the reset arrow is.
+        The font's X lights all seven rows of its cell while the arrow lights
+        three, so setting both as glyphs at one size made the cross look twice
+        the weight and crowd its square.
+
+        It sits at column 8 rather than 7, the exact mirror of the arrow at 37.
+        One sprite pixel further in reads as better seated on the body, which
+        narrows towards his left edge here.
+        """
+        s = max(2, SCALE)
+        gx, gy = self.ox + 8 * SCALE, self.oy + 38 * SCALE
+        self.rect(gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2, CREAM,
+                  outline=DISC_EDGE, width=max(1, SCALE // 4))
+        r = s * 0.72                            # half the cross, corner to middle
+        for dx in (r, -r):
+            self.canvas.create_line(gx - dx, gy - r, gx + dx, gy + r,
+                                    fill=DISC_EDGE, width=max(1, round(s / 2.5)),
+                                    capstyle="round", tags="ui")
+        self.hits["exit"] = (gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2)
 
     def reset_button(self):
         """A looping arrow, drawn rather than lettered -- no glyph reads at 4px."""
@@ -952,7 +971,7 @@ class Totoro:
         # method reaches, which is all of them except DONE -- repaint() has
         # already returned by then, so the tantrum keeps the screen to itself
         # and there is no button to click while he is swelling.
-        self.corner_button("exit", 38, "X", True, x_sprite=7)
+        self.exit_button()
         if self.state in (RUNNING, PAUSED):
             self.reset_button()
 
@@ -1422,7 +1441,7 @@ def selftest():
         root.destroy()
 
     # both corner buttons have to sit on his body, not hang beside it
-    for name, bx, by in (("pin", 37, 38), ("reset", 37, 47), ("exit", 7, 38)):
+    for name, bx, by in (("pin", 37, 38), ("reset", 37, 47), ("exit", 8, 38)):
         for dy in (-2, 2):
             for dx in (-2, 2):
                 assert grid[by + dy][bx + dx] != ".", \
