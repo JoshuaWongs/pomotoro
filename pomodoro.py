@@ -5,7 +5,7 @@ A frameless timer parked in the bottom-right corner of the desktop. Type the
 minutes straight onto its belly, name the task, hit start. The belly is a clock
 face: the elapsed slice fills in pale teal against dark. When time is up he
 comes to the front, swells and reddens while a beep counts it out, then
-bursts into leaves, acorns and soot sprites.
+bursts into the rain at the bus stop.
 
 Stdlib only. Run `python pomodoro.py --selftest` to check the logic.
 """
@@ -56,9 +56,10 @@ RAGE_MS = 2250                  # 0.75 * 3000
 RAGE_STEP_MS = 90               # 25 frames, exactly
 BOOM_MS = 1500
 BOOM_STEP_MS = 35
-BOOM_LEAVES = 26
-BOOM_ACORNS = 14
-BOOM_SPRITES = 16
+BOOM_RAIN = 46                  # streaks falling at any one moment
+BOOM_DROPS = 5                  # droplets kicked off the canopy each frame
+UMBRELLA_OPEN = 0.16            # of the burst spent springing open
+UMBRELLA_SHUT = 0.22            # and collapsing again at the end
 
 PALETTE = {
     ".": KEY, "O": "#2f2f2f",
@@ -665,7 +666,8 @@ class Totoro:
         self.hits = {}                      # name -> (x0, y0, x1, y1)
         self.spent = 0.0                    # how much of the timer has gone
         self.dance_seq = 0                  # cancels an animation already in flight
-        self.bits = []                      # what he bursts into
+        self.bits = []                      # rain, once he has burst
+        self.drops = []                     # and what runs off the umbrella
         self.alarm_stop = threading.Event()
         self.work_text = str(DEFAULT_MINUTES)   # the last focus length run
         self.work_task = ""
@@ -1201,50 +1203,54 @@ class Totoro:
         self.rest_at(zoom, *(jitter if shake else (0, 0)))
         self.root.after(RAGE_STEP_MS, self.rage, step + 1, seq)
 
-    # He bursts into the things he is actually made of in the film: acorns,
-    # the leaves of his camphor tree, and a scatter of soot sprites.
-    LEAF_COLOURS = ("#4a7c3f", "#6aa84f", "#8fbf5a", "#3d6633")
-    ACORN_BODY = "#8a5a2b"
-    ACORN_CAP = "#4a2f18"
-    SOOT = "#141414"
+    # He used to fly apart into leaves, acorns and soot sprites, all three at
+    # once and in a full circle. Three palettes, none of them his own, and at
+    # four sprite pixels a frame most of it crossed the window edge within a
+    # quarter of a second and was clipped mid-flight along a boundary nobody
+    # can see. It read as three effects firing at the same time.
+    #
+    # What replaced it is the one image anyone who has seen the film can
+    # picture: the umbrella at the bus stop in the rain. It solves the mess as
+    # well as the theme. Rain falls vertically, so nothing has to leave
+    # sideways, and the streaks wrap from the bottom back to the top, so it
+    # rains for the whole burst instead of spraying once. One palette, and it
+    # is nearly the clock face's already -- the film's night scenes are indigo
+    # and blue-black with a single warm thing in frame, which here is the
+    # canopy. Miyazaki's brief to Kazuo Oga was "subdued but beautiful" and
+    # specifically not raw primary colour, which is why the red is a brick and
+    # not a pillarbox.
+    RAIN_COLOURS = ("#3f5f6b", "#56808e", "#7aa3ab")    # far, middle, near
+    CANOPY = "#9c4a4e"
+    CANOPY_LIT = "#bb6164"
+    CANOPY_EDGE = "#5e2b2e"
+    SHAFT = "#3a2e2a"
+    DROP = "#cfe3e8"
+    UMB_W, UMB_H = 24, 15                               # in sprite pixels
 
     def burst_centre(self):
-        big = SCALE * GROW_TO
+        """Where he was standing, which is where the umbrella goes.
+
+        Taken from the renderer's own number rather than SCALE * GROW_TO. The
+        two agree only while that product lands on a whole number, which is
+        exactly the trap in DESIGN.md that the window padding fell into: at
+        SCALE 6 the sprite is 8 pixels a cell and this sum says 8.25, so the
+        umbrella would stand a few pixels off from his own footprints.
+        """
+        big = max(SCALE, self.rage_zoom(1.0))
         return (self.win_w - GRID_W * big / 2, self.win_h - GRID_H * big / 2)
 
     def boom(self, step, seq=None):
-        """He pops, and out comes the forest: leaves, acorns, soot sprites."""
+        """He pops, and the bus stop in the rain is what is left standing."""
         if seq is not None and seq != self.dance_seq:
             return
         if step == 0:
             self.alarm_stop.set()               # the beeping stops on the pop
             play_boom()
             self.canvas.itemconfigure(self.body, state="hidden")
-            cx, cy = self.burst_centre()
-            self.bits = []
-            for kind, count in (("leaf", BOOM_LEAVES), ("acorn", BOOM_ACORNS),
-                                ("soot", BOOM_SPRITES)):
-                for _ in range(count):
-                    ang = random.uniform(0, 2 * math.pi)
-                    speed = {"leaf": (1.4, 3.4), "acorn": (1.8, 4.2),
-                             "soot": (1.0, 2.6)}[kind]
-                    sp = random.uniform(*speed) * SCALE
-                    self.bits.append({
-                        "kind": kind,
-                        "x": cx + random.uniform(-3, 3) * SCALE,
-                        "y": cy + random.uniform(-3, 3) * SCALE,
-                        "vx": math.cos(ang) * sp,
-                        # leaves get thrown up first, then flutter back down
-                        "vy": math.sin(ang) * sp - (random.uniform(0.8, 2.0)
-                                                    * SCALE if kind == "leaf"
-                                                    else 0.0),
-                        "size": random.uniform(*{"leaf": (2.2, 3.6),
-                                                 "acorn": (1.8, 2.6),
-                                                 "soot": (1.6, 2.8)}[kind]) * SCALE,
-                        "phase": random.uniform(0, 2 * math.pi),
-                        "sway": random.uniform(0.5, 1.6),
-                        "colour": random.choice(self.LEAF_COLOURS),
-                    })
+            # seeded, so it is already raining on the first frame rather than
+            # starting with a clear sky and a sheet of drops arriving together
+            self.bits = [self.new_streak(seeded=True) for _ in range(BOOM_RAIN)]
+            self.drops = []
 
         self.canvas.delete("boom")
         t = step * BOOM_STEP_MS / BOOM_MS
@@ -1253,60 +1259,156 @@ class Totoro:
                                       state="normal")
             self.reset()
             return
-        # everything shrinks away over the last stretch, so the screen clears
-        # instead of the whole burst blinking out of existence at once
-        fade = 1.0 if t < 0.72 else max(0.0, (1.0 - t) / 0.28)
 
-        for b in self.bits:
-            k = b["kind"]
-            if k == "leaf":
-                # leaves catch the air: they slow fast and flutter side to side
-                b["vx"] *= 0.93
-                b["vy"] = b["vy"] * 0.93 + 0.10 * SCALE
-                b["x"] += b["vx"] + math.sin(t * 9 + b["phase"]) * b["sway"] * SCALE
-                b["y"] += b["vy"]
-                # the flutter also turns them edge-on and back again
-                w = b["size"] * fade * abs(math.cos(t * 7 + b["phase"])) * 1.15 + 1
-                h = b["size"] * fade * 0.62
-                if h < 0.6:
-                    continue
-                self.canvas.create_oval(b["x"] - w, b["y"] - h, b["x"] + w,
-                                        b["y"] + h, fill=b["colour"],
-                                        outline="#2f4a28", tags="boom")
-            elif k == "acorn":
-                b["vx"] *= 0.985
-                b["vy"] = b["vy"] + 0.30 * SCALE      # acorns just drop
-                b["x"] += b["vx"]
-                b["y"] += b["vy"]
-                r = b["size"] * fade
-                if r < 0.6:
-                    continue
-                self.canvas.create_oval(b["x"] - r * 0.72, b["y"] - r * 0.5,
-                                        b["x"] + r * 0.72, b["y"] + r * 1.15,
-                                        fill=self.ACORN_BODY, outline="#3c2512",
-                                        tags="boom")
-                self.canvas.create_oval(b["x"] - r * 0.8, b["y"] - r * 0.95,
-                                        b["x"] + r * 0.8, b["y"] - r * 0.05,
-                                        fill=self.ACORN_CAP, outline="",
-                                        tags="boom")
-            else:                                     # soot sprite
-                b["vx"] *= 0.90
-                b["vy"] = b["vy"] * 0.90 + 0.05 * SCALE
-                b["x"] += b["vx"] + math.sin(t * 12 + b["phase"]) * 0.5 * SCALE
-                b["y"] += b["vy"]
-                r = b["size"] * fade
-                if r <= 0.5:
-                    continue
-                self.canvas.create_oval(b["x"] - r, b["y"] - r, b["x"] + r,
-                                        b["y"] + r, fill=self.SOOT, outline="",
-                                        tags="boom")
-                e = max(1.0, r * 0.30)
-                for ex in (-r * 0.36, r * 0.36):
-                    self.canvas.create_oval(b["x"] + ex - e, b["y"] - r * 0.2 - e,
-                                            b["x"] + ex + e, b["y"] - r * 0.2 + e,
-                                            fill="#ffffff", outline="",
-                                            tags="boom")
+        # it springs open, holds, then collapses shut, while the rain thins
+        # over the same tail -- so the screen empties rather than blinking out
+        if t < UMBRELLA_OPEN:
+            s = t / UMBRELLA_OPEN
+            # easeOutBack: it overshoots a little past full width and settles,
+            # which is what an umbrella catching the air actually does
+            op = 1 + 2.70158 * (s - 1) ** 3 + 1.70158 * (s - 1) ** 2
+        elif t > 1 - UMBRELLA_SHUT:
+            op = max(0.0, (1 - t) / UMBRELLA_SHUT)
+        else:
+            op = 1.0
+        wet = 1.0 if t < 0.72 else max(0.0, (1.0 - t) / 0.28)
+
+        # order is depth: rain behind, then the canopy, then what runs off it
+        self.rain(wet)
+        if op > 0.02:
+            self.umbrella(op)
+        self.splash(wet, spawn=op > 0.6 and wet > 0.3)
         self.root.after(BOOM_STEP_MS, self.boom, step + 1, seq)
+
+    def new_streak(self, seeded=False):
+        """One streak of rain, in one of three depths.
+
+        Far rain is dim, short, thin and slow; near rain is none of those. That
+        difference is the whole illusion -- a single colour at a single speed
+        looks like falling dashes, not weather.
+        """
+        lane = random.randrange(3)
+        return {
+            "lane": lane,
+            "x": random.uniform(0, self.win_w + 4 * SCALE),
+            "y": (random.uniform(0, self.win_h) if seeded
+                  else -random.uniform(0, 6) * SCALE),
+            "len": (2.2 + 1.7 * lane) * SCALE,
+            "vy": (3.2 + 2.3 * lane) * SCALE,
+            "vx": -(0.5 + 0.25 * lane) * SCALE,         # a little wind
+        }
+
+    def rain(self, wet):
+        """Fall, slanting, and wrap back to the top on landing.
+
+        The wrap is what makes it rain. At these speeds a fixed set of drops
+        has crossed the window in under a fifth of a second, which is a spray.
+        """
+        for i, s in enumerate(self.bits):
+            s["x"] += s["vx"]
+            s["y"] += s["vy"]
+            if s["y"] - s["len"] > self.win_h or s["x"] + s["len"] < 0:
+                self.bits[i] = s = self.new_streak()
+            ln = s["len"] * wet
+            if ln < 1.0:
+                continue
+            # the streak lies along its own path, so its slant and the slant
+            # of its fall agree instead of fighting
+            self.canvas.create_line(s["x"] - s["vx"] / s["vy"] * ln,
+                                    s["y"] - ln, s["x"], s["y"],
+                                    fill=self.RAIN_COLOURS[s["lane"]],
+                                    width=max(1, round(SCALE *
+                                                       (0.16 + 0.08 * s["lane"]))),
+                                    tags="boom")
+
+    def umbrella(self, op):
+        """A dome, a sagging hem, ribs, a shaft and a hook.
+
+        `op` opens it. Width grows from nothing but height only from a little
+        under half, because that is the way an umbrella opens: outwards, not
+        upwards.
+        """
+        cx, cy = self.burst_centre()
+        rw = self.UMB_W * SCALE * op
+        rh = self.UMB_H * SCALE * (0.45 + 0.55 * op)
+        if rw < SCALE:
+            return
+        panels = 5
+        sag = rh * 0.22
+        pts = []
+        for i in range(25):                     # the dome, left rim to right
+            a = math.pi * (1 + i / 24)
+            pts += [cx + rw * math.cos(a), cy + rh * math.sin(a)]
+        for q in range(panels):                 # the hem, sagging back again
+            notch = cx + rw - 2 * rw * (q + 1) / panels
+            pts += [notch + rw / panels, cy + sag, notch, cy]
+        self.canvas.create_polygon(pts, fill=self.CANOPY,
+                                   outline=self.CANOPY_EDGE,
+                                   width=max(1, SCALE // 3), tags="boom")
+        for q in range(1, panels):              # ribs, apex down to each notch
+            self.canvas.create_line(cx, cy - rh,
+                                    cx + rw - 2 * rw * q / panels, cy,
+                                    fill=self.CANOPY_EDGE,
+                                    width=max(1, SCALE // 4), tags="boom")
+        # style="arc" matters: a pieslice this thin is the bug in DESIGN.md,
+        # where Tk paints the whole disc instead of the sliver asked for
+        self.canvas.create_arc(cx - rw, cy - rh, cx + rw, cy + rh,
+                               start=112, extent=48, style="arc",
+                               outline=self.CANOPY_LIT,
+                               width=max(1, SCALE // 3), tags="boom")
+        shaft = rh * 1.5
+        # from the hem rather than the apex: the canopy is already drawn, so a
+        # shaft starting any higher would be painted on top of its own fabric
+        self.canvas.create_line(cx, cy + sag, cx, cy + shaft, fill=self.SHAFT,
+                                width=max(1, round(SCALE * 0.5)), tags="boom")
+        hook = rh * 0.34                        # the J is what stops it
+        self.canvas.create_line(cx, cy + shaft,                # being a parasol
+                                cx - hook * 0.35, cy + shaft + hook,
+                                cx - hook * 1.35, cy + shaft + hook * 0.7,
+                                smooth=True, fill=self.SHAFT,
+                                width=max(1, round(SCALE * 0.45)), tags="boom")
+        self.canvas.create_line(cx, cy - rh, cx, cy - rh * 1.15,
+                                fill=self.SHAFT,
+                                width=max(1, round(SCALE * 0.4)), tags="boom")
+
+    def splash(self, wet, spawn):
+        """Rain coming off the canopy.
+
+        It is the point of the scene -- in the film the rain drumming on the
+        umbrella is what delights him, and he jumps to shake more of it out of
+        the trees. Without this the canopy is a shape the weather ignores.
+        """
+        if spawn:
+            cx, cy = self.burst_centre()
+            for _ in range(BOOM_DROPS):
+                a = math.pi * (1 + random.random())
+                sp = random.uniform(0.7, 1.6) * SCALE
+                self.drops.append({
+                    "x": cx + self.UMB_W * SCALE * math.cos(a),
+                    "y": cy + self.UMB_H * SCALE * math.sin(a),
+                    "vx": math.cos(a) * sp,
+                    "vy": math.sin(a) * sp * 0.6,   # up and out, then gravity
+                    "life": random.randint(6, 13),
+                })
+        live = []
+        # they shrink with the rain they came from. Held at a fixed size they
+        # outlast the streaks and the last quarter second is white specks
+        # hanging in a clearing sky
+        r = SCALE * 0.22 * wet
+        for d in self.drops:
+            d["vy"] += 0.5 * SCALE
+            d["x"] += d["vx"]
+            d["y"] += d["vy"]
+            d["life"] -= 1
+            if d["life"] <= 0 or d["y"] - r > self.win_h:
+                continue
+            live.append(d)
+            if r < 0.7:
+                continue
+            self.canvas.create_oval(d["x"] - r, d["y"] - r, d["x"] + r,
+                                    d["y"] + r, fill=self.DROP, outline="",
+                                    tags="boom")
+        self.drops = live
 
     def blink(self):
         if self.state == IDLE and self.editing:
@@ -1455,6 +1557,18 @@ def selftest():
         assert w.win_h >= GRID_H * grown, (
             f"window {w.win_h}px too short for his full swell "
             f"of {GRID_H * grown}px")
+        # the umbrella is sized in sprite pixels inside that same window, so it
+        # is open to the same drift. It springs about a tenth past full width
+        # before it settles, so the overshoot is what has to fit, not the
+        # resting size.
+        cx, cy = w.burst_centre()
+        over = max(1 + 2.70158 * (p / 40 - 1) ** 3 + 1.70158 * (p / 40 - 1) ** 2
+                   for p in range(41))
+        half = w.UMB_W * SCALE * over
+        assert cx - half >= 0 and cx + half <= w.win_w, (
+            f"the umbrella is {2 * half:.0f}px across at full open, "
+            f"and the window is only {w.win_w}px")
+        assert cy + w.UMB_H * SCALE * 1.84 <= w.win_h,             "the umbrella's handle hangs out through the bottom of the window"
     finally:
         STATE_FILE = keep
         root.destroy()
