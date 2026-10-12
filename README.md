@@ -85,9 +85,13 @@ anywhere on it to pause, click again to carry on.
 running. It throws the timer away and puts him back to the standard screen: 50
 minutes, no task. Escape does the same.
 
-**Putting him away.** Right-click him while no timer is running and he closes.
-During a timer a right-click does nothing, so a stray one cannot throw a
-session away; stop the timer with the circular arrow first.
+**Putting him away.** The small `X` on his left flank, level with the arrow on
+his right, closes him. It works whether or not a timer is running.
+
+It used to be a right-click, which had to go: the close fired on the press, so
+by the time you let the button go the window was already gone and the click
+landed on whatever was behind him. On the desktop that opened the desktop's own
+right-click menu every time you shut him.
 
 **When it finishes.** He loses his temper. He comes to the front of everything,
 the clock face vanishes, his brows crash down, and over a couple of seconds he
@@ -163,7 +167,7 @@ Worth saying plainly, since you are being asked to download and run a script:
   stacking order, and a named lock and signal so a second copy calls the first
   one forward and bows out instead of stacking up in the corner.
 
-Uninstalling is right-clicking him to close him, then deleting the folder.
+Uninstalling is clicking the `X` on his flank, then deleting the folder.
 
 ## Sessions are not recorded
 

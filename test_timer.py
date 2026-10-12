@@ -137,7 +137,7 @@ root.update(); check("after layer toggle back")
 
 print("--- 4. the corner buttons must not also register as belly taps ---")
 g.repaint()
-for name in ("pin", "reset"):
+for name in ("pin", "reset", "exit"):
     b = g.hits[name]
     corners = [(b[0], b[1]), (b[2], b[1]), (b[0], b[3]), (b[2], b[3])]
     for cx, cy in corners:
@@ -158,7 +158,7 @@ if g.minutes_text != str(P.DEFAULT_MINUTES):
 print("--- 6. idle hit boxes must not overlap ---")
 g.repaint()
 pad = g.pad                        # the same slop the click handler uses
-boxes = {n: g.hits[n] for n in ("min", "task", "start") if n in g.hits}
+boxes = {n: g.hits[n] for n in ("min", "task", "start", "exit") if n in g.hits}
 names = list(boxes)
 for i, a in enumerate(names):
     for b in names[i + 1:]:
@@ -170,28 +170,41 @@ for i, a in enumerate(names):
 
 print("--- 7. random mashing ---")
 random.seed(7)
-for i in range(400):
-    if g.state == P.IDLE:
+# The X on his flank really does close him, so mashing lands on it sooner or
+# later and tears the window down mid-section. Hold the teardown for the
+# duration: this section asks whether his state stays coherent under abuse,
+# not whether closing works -- section 21 covers that.
+mash_closed = []
+real_destroy = root.destroy
+root.destroy = lambda: mash_closed.append(True)
+try:
+    for i in range(400):
+        if g.state == P.IDLE:
+            g.repaint()
+            g.minutes_text = random.choice(["1", "2", ".3", "5.3", "10"])
+            g.begin()
+            g.left = g.total * random.random()
         g.repaint()
-        g.minutes_text = random.choice(["1", "2", ".3", "5.3", "10"])
-        g.begin()
-        g.left = g.total * random.random()
-    g.repaint()
-    spots = [Ev(g.cx, g.cy)]
-    for n in ("pin", "reset", "log", "skip", "min", "task", "start"):
-        p = pt(n)
-        if p:
-            spots.append(p)
-    spots.append(Ev(random.randint(0, GRID := g.cx * 2), random.randint(0, g.cy * 2)))
-    g.click(random.choice(spots))
-    if g.state in (P.RUNNING, P.PAUSED) and random.random() < 0.3:
-        g.left = max(0.0, g.left - g.total * random.random())
-        g.ends_at = P.time.monotonic() + g.left
-    g.tick()
-    root.update()
-    check(f"mash step {i}")
-    if failures:
-        break
+        spots = [Ev(g.cx, g.cy)]
+        for n in ("pin", "reset", "exit", "log", "skip", "min", "task", "start"):
+            p = pt(n)
+            if p:
+                spots.append(p)
+        spots.append(Ev(random.randint(0, GRID := g.cx * 2),
+                        random.randint(0, g.cy * 2)))
+        g.click(random.choice(spots))
+        if g.state in (P.RUNNING, P.PAUSED) and random.random() < 0.3:
+            g.left = max(0.0, g.left - g.total * random.random())
+            g.ends_at = P.time.monotonic() + g.left
+        g.tick()
+        root.update()
+        check(f"mash step {i}")
+        if failures:
+            break
+finally:
+    root.destroy = real_destroy
+if not mash_closed:
+    note("400 random clicks never once hit the X; the mash is not reaching it")
 
 print("--- 8. he stays pinned to his corner while he swells ---")
 g.reset_to_standard()
@@ -571,6 +584,39 @@ if pend[:2] != ("25", "email"):
     note("after a break the focus block and its task should return, got "
          + repr(pend))
 g.reset_to_standard()
+
+print("--- 21. the X on his flank closes him, mid-timer included ---")
+closed = []
+real_destroy = root.destroy
+root.destroy = lambda: closed.append(True)
+try:
+    for label in ("idle", "running"):
+        g.reset_to_standard()
+        if label == "running":
+            g.minutes_text = "25"
+            g.begin()
+        g.repaint()
+        if "exit" not in g.hits:
+            note(f"no X on his flank while {label}")
+            continue
+        b = g.hits["exit"]
+        closed.clear()
+        g.click(Ev((b[0] + b[2]) / 2, (b[1] + b[3]) / 2))
+        if not closed:
+            note(f"clicking the X while {label} did not close him")
+    # while he is bursting there is no button at all: he is swelling past
+    # where it sat, an alarm thread is running and frames are queued
+    g.state = P.DONE
+    g.repaint()
+    if "exit" in g.hits:
+        note("the X must not be drawn during the tantrum")
+    closed.clear()
+    g.quit()
+    if closed:
+        note("quit must refuse while the tantrum is running")
+finally:
+    root.destroy = real_destroy
+    g.reset_to_standard()
 
 print()
 print("FAILURES:", len(failures))

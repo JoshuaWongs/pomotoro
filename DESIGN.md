@@ -75,9 +75,22 @@ while reddening and shaking harder. Then he bursts into camphor
 leaves, acorns and soot sprites — the three things he is associated with in the
 film. Clicking him or pressing Return cuts it short.
 
-**Quitting.** Right-click him while idle. He has no frame, taskbar button or
-close box, so before this the only way out was Task Manager. Mid-timer the
-right-click is ignored, so a stray one cannot throw a session away.
+**Quitting.** The `X` on his left flank, mirroring the layer arrow on his
+right at the same height. He has no frame, taskbar button or close box, so
+before this the only way out was Task Manager. It closes him mid-timer too;
+the button is small and deliberate enough that the risk of a stray hit is
+smaller than the cost of being unable to shut a running timer.
+
+It replaced a right-click, which had two problems. It was invisible, so nobody
+could discover it. And it was bound to the press rather than the release, so
+the window was destroyed before the button came back up and the release landed
+on whatever lay beneath -- on the desktop, that opened the desktop's own
+context menu every single time he was closed.
+
+The button is absent during the tantrum rather than merely ignored. He swells
+past where it sits, an alarm thread is beeping and animation frames are queued
+against the window, so `quit()` refuses in that state as well as going
+undrawn.
 
 **The chain.** Finishing a focus block loads the break without starting it: a
 break is a fifth of the block, so 50 gives 10 and 25 gives 5. Finishing the

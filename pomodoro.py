@@ -714,8 +714,12 @@ class Totoro:
         self.small = max(1, round(self.big * 0.46))
         self.tiny = max(1, round(self.big * 0.34))
 
+        # Left click only. Right-click used to close him, but it fired on the
+        # press: quit() destroyed the window before the button came back up,
+        # the release landed on whatever was underneath, and on the desktop
+        # that opened the desktop's own context menu. The X on his flank
+        # replaces it.
         self.canvas.bind("<Button-1>", self.click)
-        self.canvas.bind("<Button-3>", self.quit)
         root.bind("<Key>", self.key)
         self.apply_layer()
         self.blink()
@@ -874,10 +878,14 @@ class Totoro:
             self.rect(x, y, x + px * 2, y + px, fill, outline="")
             x += px * 4
 
-    def corner_button(self, name, y_sprite, glyph, lit):
-        """One of the small square buttons clipped to his right side."""
+    def corner_button(self, name, y_sprite, glyph, lit, x_sprite=37):
+        """One of the small square buttons clipped to his side.
+
+        x_sprite 37 is his right flank, 7 the matching spot on his left. The
+        body spans columns 4 to 40 on the button row, so both sit on him.
+        """
         s = max(2, SCALE)
-        gx, gy = self.ox + 37 * SCALE, self.oy + y_sprite * SCALE
+        gx, gy = self.ox + x_sprite * SCALE, self.oy + y_sprite * SCALE
         self.rect(gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2,
                   CREAM if lit else "#5a636e", outline=DISC_EDGE,
                   width=max(1, SCALE // 4))
@@ -940,6 +948,11 @@ class Totoro:
             if self.state == PAUSED:
                 self.label("PAUSED", self.cy + 0.44 * R, self.tiny, TAN)
         self.corner_button("pin", 38, "▲" if self.pinned else "▼", self.pinned)
+        # Level with the arrow, on his other flank. Drawn in every state this
+        # method reaches, which is all of them except DONE -- repaint() has
+        # already returned by then, so the tantrum keeps the screen to itself
+        # and there is no button to click while he is swelling.
+        self.corner_button("exit", 38, "X", True, x_sprite=7)
         if self.state in (RUNNING, PAUSED):
             self.reset_button()
 
@@ -951,6 +964,11 @@ class Totoro:
         return bool(b) and b[0] - p <= ev.x <= b[2] + p and b[1] - p <= ev.y <= b[3] + p
 
     def click(self, ev):
+        # Both flank buttons are tested before anything else, so neither can
+        # also read as a tap on the belly behind them.
+        if self.hit(ev, "exit"):
+            self.quit()
+            return
         if self.hit(ev, "pin"):
             self.toggle_pin()
             return
@@ -978,15 +996,25 @@ class Totoro:
             self.last_paint = None
 
     def quit(self, ev=None):
-        """Right-click puts him away -- but only between timers.
+        """The X on his left flank puts him away.
 
         He has no frame, no taskbar button and no close box, so without this
-        the only way out was Task Manager. Mid-timer a stray right-click would
-        throw the session away, so there it does nothing; the reset arrow
-        comes first.
+        the only way out was Task Manager. It closes him mid-timer too: the
+        button is small and deliberate, and being unable to shut a running
+        timer was the worse half of the trade.
+
+        DONE is refused rather than merely undrawn. During the tantrum an
+        alarm thread is beeping and animation frames are queued against the
+        window, and tearing it down underneath them raises from the callback.
+        repaint() draws no button in that state, so this is a guard on a path
+        nothing currently takes.
         """
-        if self.state == IDLE:
-            self.root.destroy()
+        if self.state == DONE:
+            return
+        stop = getattr(self, "alarm_stop", None)
+        if stop is not None:
+            stop.set()                  # never leave a beep thread running
+        self.root.destroy()
 
     def focus_field(self, which, at=None):
         self.editing = which
@@ -1350,21 +1378,33 @@ def selftest():
             w.state = st
             w.repaint()
         root.update()
-        # right-click is the only way to close him, and must never fire
-        # mid-timer, where a stray click would throw the session away
-        assert w.canvas.bind("<Button-3>"), "right-click is not bound"
+        # The X on his left flank is the only way to close him. Right-click is
+        # gone deliberately: it fired on the press, so quit() tore the window
+        # down before the button came back up and the release reached whatever
+        # lay underneath -- on the desktop, that opened the desktop's menu.
+        assert not w.canvas.bind("<Button-3>"), "right-click should not be bound"
         closed = []
         real_destroy = root.destroy
         root.destroy = lambda: closed.append(True)
         try:
-            w.state = RUNNING
+            for st in (IDLE, RUNNING, PAUSED):
+                w.state = st
+                w.repaint()
+                assert "exit" in w.hits, f"no X on his flank while {st}"
+                closed.clear()
+                w.quit()
+                assert closed, f"the X did not close him while {st}"
+            # during the tantrum he is swelling, an alarm thread is beeping and
+            # animation frames are queued: no button, and quit refuses anyway
+            w.state = DONE
+            w.repaint()
+            assert "exit" not in w.hits, "the X must not be drawn mid-tantrum"
+            closed.clear()
             w.quit()
-            assert not closed, "right-click closed him with a timer running"
-            w.state = IDLE
-            w.quit()
-            assert closed, "right-click while idle did not close him"
+            assert not closed, "the X must not close him mid-tantrum"
         finally:
             root.destroy = real_destroy
+            w.state = IDLE
         # the window has to hold him at full swell, or he bursts out of his own
         # edges. The padding and the sprite size used to be worked out by two
         # separate sums that agreed only while SCALE * GROW_TO landed on a
@@ -1382,10 +1422,10 @@ def selftest():
         root.destroy()
 
     # both corner buttons have to sit on his body, not hang beside it
-    for name, by in (("pin", 38), ("reset", 47)):
+    for name, bx, by in (("pin", 37, 38), ("reset", 37, 47), ("exit", 7, 38)):
         for dy in (-2, 2):
             for dx in (-2, 2):
-                assert grid[by + dy][37 + dx] != ".", \
+                assert grid[by + dy][bx + dx] != ".", \
                     f"the {name} button hangs off the body at corner {(dx, dy)}"
 
     # a second copy has to bow out, or two of him stack in the corner. Only the

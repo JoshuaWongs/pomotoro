@@ -24,8 +24,11 @@ install.
 python pomodoro.py
 ```
 
-Right-clicking him while no timer is running closes him. He has no frame or
-taskbar button, so that is the only way out short of ending the process.
+The `X` button on his left flank closes him, in any state except the tantrum.
+He has no frame or taskbar button, so that is the only way out short of ending
+the process. Right-click is deliberately **not** bound: it fired on the press,
+so the release reached the window underneath and opened the desktop's context
+menu. Do not re-add it.
 
 ### Command line
 
