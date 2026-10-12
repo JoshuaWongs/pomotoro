@@ -14,7 +14,8 @@ The beep pitch and spacing, and the original blink-on-finish, were measured
 from that video's audio and frames rather than guessed.
 
 The character was a gorilla first, then switched to Totoro from a bead chart.
-The finish was a dance, then a blink, then the current tantrum.
+The finish was a dance, then a blink, then a tantrum that swelled him and
+burst him, then the rain he now stands in.
 
 ## What it needs to run
 
@@ -34,7 +35,7 @@ occasionally a file lock landing exactly on a write.
 |---|---|
 | pomodoro.py | The whole application, about 1400 lines |
 | font5x7.py | A hand-drawn pixel alphabet, 81 characters |
-| test_timer.py | 20 sections of behaviour tests |
+| test_timer.py | 21 sections of behaviour tests |
 | totoro.ico | His taskbar icon, generated from the sprite |
 | state.json | One setting: which way his arrow points |
 
@@ -69,11 +70,21 @@ returns to the standard screen. Escape does the same.
 first second and hits 00:00 exactly as it ends. Rounding down made it drop to
 49:59 the instant it started, which looked broken.
 
-**Finishing.** He comes to the front of everything, the clock face vanishes,
-his brows crash down, and over a couple of seconds he swells by about a third
-while reddening and shaking harder. Then he bursts into camphor
-leaves, acorns and soot sprites — the three things he is associated with in the
-film. Clicking him or pressing Return cuts it short.
+**Finishing.** It comes on to rain. He comes to the front of everything and
+shivers in place for about a second and a half, the same size throughout, while
+rain falls past him in three depths — the far two behind him, the nearest in
+front, which is what puts him inside the weather rather than in a picture of
+it. The belly keeps its clock face, filled with the spent colour and reading
+00:00. Then the shiver damps out and he settles back onto his mark. Clicking
+him or pressing Return cuts it short.
+
+He used to lose his temper instead: swell by a third, redden, and burst into
+camphor leaves, acorns and soot sprites. Three palettes, none of them his, all
+fired at once and in a full circle, and at four sprite pixels a frame most of
+it crossed the window edge within a quarter second and was clipped mid-flight
+against a boundary nobody can see. It read as three effects going off together.
+The version before this one replaced it with an umbrella at the bus stop, which
+is kept at the tag `rain-explosion` if it is ever wanted back.
 
 **Quitting.** The `X` on his left flank, mirroring the layer arrow on his
 right at the same height. He has no frame, taskbar button or close box, so
@@ -87,10 +98,10 @@ the window was destroyed before the button came back up and the release landed
 on whatever lay beneath -- on the desktop, that opened the desktop's own
 context menu every single time he was closed.
 
-The button is absent during the tantrum rather than merely ignored. He swells
-past where it sits, an alarm thread is beeping and animation frames are queued
-against the window, so `quit()` refuses in that state as well as going
-undrawn.
+The button is absent while it rains rather than merely ignored. A click
+anywhere clears the shower, so a button would only be a smaller target for what
+the whole widget already does, and an alarm thread and queued frames are both
+live. `quit()` refuses in that state as well as going undrawn.
 
 **The chain.** Finishing a focus block loads the break without starting it: a
 break is a fifth of the block, so 50 gives 10 and 25 gives 5. Finishing the
@@ -105,10 +116,11 @@ same above the taskbar, measured against the work area so the taskbar never
 covers him. He cannot be dragged.
 
 The window is larger than he is: it holds a transparent margin up and to the
-left big enough for him at full tantrum size. He is anchored to the window's
-bottom-right corner, so swelling pushes him up and left into that margin
-instead of off the screen edge. Transparent areas pass clicks through, so the
-oversized window does not block the desktop behind it.
+left, originally sized to hold him at full tantrum size and now the room the
+rain falls through. He is anchored to the window's bottom-right corner, with
+his own edges against the window's, which is why the shiver is only ever up and
+to the left — there is nowhere else to go. Transparent areas pass clicks
+through, so the oversized window does not block the desktop behind it.
 
 **The arrow** on his side chooses his layer. Up means he floats above every
 window. Down means he sits behind them, which is the normal state. A finished
@@ -143,15 +155,30 @@ the other icons on the taskbar.
 
 ## Sound
 
-A beep every half second from the moment the timer ends until he bursts, then a
-low crunch as he does. Both are synthesised into a WAV the first time they play
-and kept in a temp folder for the rest of the run. The folder is deleted on
+A beep every half second from the moment the timer ends until the rain stops.
+It is synthesised into a WAV the first time it plays and kept in a temp folder
+for the rest of the run. The folder is deleted on
 exit. A run that never reaches exit -- Windows shutting down, or Task Manager --
 leaves it behind, so each launch that wins the single-copy lock sweeps up any
 it finds. Before that, every such run left one more folder in %TEMP%.
 
-The beep pitch and spacing were measured from the video that inspired this: a
-single 880 Hz tone about 42 ms long, once every 500 ms. Steady, not a triple.
+The beep is measured off the video that inspired this, by filtering a
+recording of it one frequency at a time:
+
+| partial | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| measured | 1.000 | 0.008 | 0.334 | 0.006 | 0.207 | 0.002 | 0.150 |
+| a square wave | 1.000 | 0.000 | 0.333 | 0.000 | 0.200 | 0.000 | 0.143 |
+
+That is a square wave at 880 Hz, not a near miss. The envelope peaks about 7 ms
+in and is down to a tenth of its peak by 90 ms, and the gap is 500 ms, measured
+across six beeps as 490, 495, 503, 500, 502. Steady, not a triple.
+
+It is worth recording that two attempts to improve on this by ear both failed
+in the same direction. A plain sine was rejected for sounding like a test tone,
+and short pips were pitched up at 1976 Hz on the reasoning that clock buzzers
+are high. Both were nearly two octaves above the real thing. One measurement
+settled what an argument about timbre could not.
 
 ## Traps found the hard way
 
@@ -180,22 +207,27 @@ promises, and that error accumulates. Each beep is timed against a fixed
 schedule instead. Measured: the drifting version wandered 358 ms off by the
 sixth beep, the scheduled one stays within 5 ms.
 
-**Animations must carry a sequence number.** Pressing a button mid-tantrum used
+**Animations must carry a sequence number.** Pressing a button mid-finish used
 to leave the queued animation frames firing afterwards, parking him off-centre.
 Each animation now carries the number it started with and stops if it changes.
 
 **The window padding must be asked for, not recalculated.** The sprite scales
-to a whole number of pixels per cell, so his width at full swell is
-`GRID_W * round(SCALE * GROW_TO)`. The transparent padding was originally
-worked out by a separate sum -- cells of growth, times SCALE -- and the two
-agreed only while `SCALE * GROW_TO` happened to land on a whole number. At
-`GROW_TO = 1.5` it always did, so the bug sat there invisibly; checked
+to a whole number of pixels per cell, so the window's width is
+`GRID_W * round(SCALE * HEADROOM)`. The transparent padding was originally
+worked out by a separate sum -- cells of padding, times SCALE -- and the two
+agreed only while `SCALE * HEADROOM` happened to land on a whole number. At the
+old value of 1.5 it always did, so the bug sat there invisibly; checked
 afterwards, the old sum was short by 4 to 24 pixels at scales 2, 4, 8 and 10,
-and merely oversized at 6 and 12. Shortening the tantrum to `1.375` made him
-swell out through his own window edge. The padding is now taken from
-`rage_zoom(1.0)`, the same call the renderer uses, so the two cannot drift
-apart again. The matching assertion lives in `--selftest` rather than only in
-`test_timer.py`, because the latter does not run in CI.
+and merely oversized at 6 and 12. Changing the value to `1.375` made him swell
+out through his own window edge. The padding is now taken from
+`window_cell()`, the same call the renderer rounds with, so the two cannot
+drift apart again. The matching assertion lives in `--selftest` rather than
+only in `test_timer.py`, because the latter does not run in CI.
+
+The same sum reappeared later in the code that placed the burst, and was found
+the same way: checked across display scales it was out by up to 11 pixels, and
+by exactly 0 at scale 8, which is the scale of the machine this was written on.
+A sum that is right on the only machine you test on is the worst kind.
 
 ## Logging is switched off
 
@@ -227,13 +259,14 @@ font, the sounds, the sprite proportions, and that the widget still builds — a
 missing colour or a typo in the drawing code is invisible to everything else
 and only shows up on launch.
 
-test_timer.py has 20 sections and feeds clicks at real on-screen coordinates
+test_timer.py has 21 sections and feeds clicks at real on-screen coordinates
 through the click handler. The
 ones worth knowing about: the progress slice must match the clock to within a
 twentieth of a degree and must show colour from the first second; the beeps
-must not drift; he must come back from the tantrum with nothing left on screen
-and on the right layer; and skipping an offered break must not invert the
-chain.
+must not drift; the shiver must never carry him outside his own window and must
+settle back onto his mark; he must come back from the rain with nothing left on
+screen and on the right layer; and skipping an offered break must not invert
+the chain.
 
 Timing-sensitive checks measure cumulative drift rather than gap-to-gap jitter,
 because jitter just measures how busy the machine is. One section retries once
@@ -244,6 +277,7 @@ before failing for the same reason.
 - Windows only. The transparency, the layering, the sound and the single-copy
   check are all Win32.
 - The finish notification is gone by choice; he comes to the front instead.
-- Explosion fragments are clipped at the window edge.
+- The rain is confined to his window, so it falls in a rectangle rather than
+  across the whole screen.
 - Changing the taskbar icon needs an unpin and re-pin, because Windows caches
   pinned icons.

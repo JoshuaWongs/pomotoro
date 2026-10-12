@@ -4,8 +4,8 @@
 A frameless timer parked in the bottom-right corner of the desktop. Type the
 minutes straight onto its belly, name the task, hit start. The belly is a clock
 face: the elapsed slice fills in pale teal against dark. When time is up he
-comes to the front, swells and reddens while a beep counts it out, then
-bursts into the rain at the bus stop.
+comes to the front and shivers in the rain, belly reading 00:00, while a beep
+counts it out.
 
 Stdlib only. Run `python pomodoro.py --selftest` to check the logic.
 """
@@ -43,23 +43,26 @@ KEY = "#ff00ff"                # magenta stands in for transparent
 GRID_W, GRID_H = 44, 63
 DISC_CX, DISC_CY, DISC_R = 22, 47, 11.0     # belly clock, in sprite pixels
 
-# When the timer ends he loses his temper: swells to GROW_TO, turning red, then
-# bursts. The window has to be big enough to hold him at full size, so it keeps
-# GROW_TO worth of transparent room up and to the left of where he rests.
-# The swell was cut to three quarters of its old length, because the wait
-# before the bang dragged: RAGE_MS was 3000 and the swell was +0.5. Both the
-# time and the growth were cut by a quarter together, which leaves the rate of
-# swell exactly as it was -- he now bursts part way up the same curve instead
-# of racing to the old size in less time.
-GROW_TO = 1.375                 # 1.0 + 0.75 * 0.5
-RAGE_MS = 2250                  # 0.75 * 3000
-RAGE_STEP_MS = 90               # 25 frames, exactly
-BOOM_MS = 1500
-BOOM_STEP_MS = 35
-BOOM_RAIN = 46                  # streaks falling at any one moment
-BOOM_DROPS = 5                  # droplets kicked off the canopy each frame
-UMBRELLA_OPEN = 0.16            # of the burst spent springing open
-UMBRELLA_SHUT = 0.22            # and collapsing again at the end
+# When the timer ends it comes on to rain and he shivers in it until it
+# passes. He is the same size throughout, so the window is no longer sized
+# around a swell: it keeps HEADROOM worth of clear room up and to the left of
+# where he rests, which is the room the rain falls through.
+HEADROOM = 1.375                # window size as a multiple of the sprite
+SHOWER_MS = 1700                # the shiver and the rain, start to finish
+SHOWER_STEP_MS = 45             # 37 frames; any slower and the rain strobes
+SHOWER_RAIN = 46                # streaks falling at any one moment
+
+# The shiver is measured frame by frame off the bouncing avocado in the video
+# this is modelled on, at 9:24. Three things came out of that. It holds an
+# offset for three or four frames and then jumps, rather than wobbling
+# smoothly -- sampling a new offset every frame reads as a buzz, not a shiver.
+# It travels about half again as far sideways as it does up and down. And the
+# peak travel is only about 3% of its own width, which is far less than it
+# looks: the eye reads the jumping, not the distance.
+SHAKE_X = 1.5                   # sprite pixels, peak
+SHAKE_Y = 1.0
+SHAKE_HOLD = 3                  # frames per offset, which is about 3.5 Hz
+SHAKE_SETTLE = 0.18             # of the shower spent damping back to still
 
 PALETTE = {
     ".": KEY, "O": "#2f2f2f",
@@ -119,25 +122,16 @@ def _outline(g, body="DMLCKBWE", ch="O"):
                     break
 
 
-def _line(g, x0, y0, x1, y1, ch, thick=2):
-    """A short straight stroke, used for the angry brows."""
-    steps = max(abs(x1 - x0), abs(y1 - y0)) or 1
-    for i in range(steps + 1):
-        x = x0 + (x1 - x0) * i / steps
-        y = y0 + (y1 - y0) * i / steps
-        for t in range(thick):
-            xx, yy = round(x), round(y) + t
-            if 0 <= xx < GRID_W and 0 <= yy < GRID_H:
-                g[yy][xx] = ch
-
-
-def build_sprite(angry=False):
+def build_sprite():
     """Totoro, minus the clock face -- that is drawn as a true circle.
 
     Follows the bead-chart proportions: tall ears leaning outward from a single
     tapered body, eyes set wide, a small dark nose high between them, and a
-    white belly carrying the marks. `angry` is the face he pulls when the timer
-    runs out: heavy slanted brows, narrowed eyes and a jagged mouth.
+    white belly carrying the marks.
+
+    There is one face. He used to pull a furious one when the timer ran out --
+    brows down, eyes narrowed, a jagged mouth -- to sell a tantrum that no
+    longer happens. He stands in the rain now and takes it calmly.
     """
     g = _blank()
     # ears: tall, pointed, leaning out, with a lighter core
@@ -169,44 +163,16 @@ def build_sprite(angry=False):
     for ex in (15, 29):
         _ellipse(g, ex, 20, 3.0, 3.4, "W")
         _ellipse(g, ex, 20, 1.4, 1.6, "E")
-    if angry:                                   # brows crash down over them
-        _line(g, 11, 15, 18, 19, "E", 2)
-        _line(g, 33, 15, 26, 19, "E", 2)
-        for ex in (15, 29):                     # and the eyes narrow
-            for x in range(ex - 3, ex + 4):
-                for y in (17, 18):
-                    if g[y][x] in ("W", "E"):
-                        g[y][x] = "M"
     # nose: three dots across with one under the middle
     for x in range(21, 24):
         g[20][x] = "E"
     g[21][22] = "E"
-    if angry:                                   # a jagged snarl under it
-        for i, x in enumerate(range(17, 28)):
-            g[24 + (i % 2)][x] = "E"
     # blush, outboard and just under the eyes
     for bx in (11, 31):
         for dx in range(2):
             g[24][bx + dx] = "B"
     _outline(g)
     return ["".join(r) for r in g]
-
-
-def redden(colour, t):
-    """Push a colour towards furious red, keeping its light and dark apart."""
-    r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
-    r = min(255, round(r + (238 - r) * t * 0.92))
-    g = round(g * (1 - 0.74 * t))
-    b = round(b * (1 - 0.80 * t))
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def rage_photo(grid, heat, zoom):
-    """One frame of the tantrum: the grid, reddened by `heat`, at `zoom`."""
-    pal = {k: (v if k == "." else redden(v, heat)) for k, v in PALETTE.items()}
-    img = tk.PhotoImage(width=GRID_W, height=GRID_H)
-    img.put(" ".join("{" + " ".join(pal[c] for c in row) + "}" for row in grid))
-    return img.zoom(max(1, zoom))
 
 
 def sprite_photo(grid):
@@ -350,13 +316,12 @@ def save_state(**kw):
 # winsound.Beep is a bare square wave with no envelope: it clicks at both ends
 # and cannot make noise at all. Everything below is synthesised into a WAV in
 # memory and handed to PlaySound, which costs nothing extra and lets the beep
-# have a shaped edge and the explosion be actual noise.
+# have a shaped edge instead of a click at each end.
 RATE = 22050
 BEEP_HZ = 1976                 # B6. A buzzer lives up here; a test tone does not
 BEEP_MS = 34                   # one pip, and there are two of them
 BEEP_GAP_MS = 30               # the silence between the pair
 BEEP_PERIOD_MS = 500
-BOOM_TAIL_MS = 900
 
 
 def _wav(samples):
@@ -399,27 +364,6 @@ def _beep_wav():
         return out
     gap = [0.0] * int(RATE * BEEP_GAP_MS / 1000)
     return _wav(pip() + gap + pip())
-
-
-def _boom_wav():
-    """Noise through a closing filter over a falling sine: a real bang."""
-    n = int(RATE * BOOM_TAIL_MS / 1000)
-    attack = int(RATE * 0.002)              # tiny, but enough to stop a pop
-    out = []
-    lp = 0.0
-    for i in range(n):
-        t = i / RATE
-        prog = i / n
-        env = math.exp(-4.0 * prog) * (min(1.0, i / attack) if attack else 1.0)
-        # noise, low-passed harder as it decays, so the crack becomes a rumble
-        cutoff = 0.55 * (1 - prog) ** 2 + 0.02
-        lp += cutoff * (random.uniform(-1.0, 1.0) - lp)
-        # body: a sine dropping from 130 Hz to about 35 Hz
-        freq = 130 * math.exp(-2.6 * prog) + 32
-        body = math.sin(2 * math.pi * freq * t)
-        v = 0.86 * env * (1.15 * lp + 0.75 * body)
-        out.append(round(v * 24) / 24)          # a little crunch, kept retro
-    return _wav(out)
 
 
 _SOUNDS = {}
@@ -487,10 +431,6 @@ def sweep_stale_sounds():
 
 def play_beep():
     _play("beep", _beep_wav)
-
-
-def play_boom():
-    _play("boom", _boom_wav)
 
 
 def alarm(stop):
@@ -666,8 +606,8 @@ class Totoro:
         self.hits = {}                      # name -> (x0, y0, x1, y1)
         self.spent = 0.0                    # how much of the timer has gone
         self.dance_seq = 0                  # cancels an animation already in flight
-        self.bits = []                      # rain, once he has burst
-        self.drops = []                     # and what runs off the umbrella
+        self.bits = []                      # rain, once the timer is up
+        self.shake = (0.0, 0.0)             # how far off his mark he is now
         self.alarm_stop = threading.Event()
         self.work_text = str(DEFAULT_MINUTES)   # the last focus length run
         self.work_task = ""
@@ -690,11 +630,11 @@ class Totoro:
         # grows off the screen edge.
         #
         # Ask the renderer how big he really gets rather than working it out
-        # again from GROW_TO. The sprite is scaled to a whole number of pixels
-        # per cell, so the two sums round differently and the window comes out
-        # a few pixels too small -- which stays invisible for as long as
-        # SCALE * GROW_TO happens to land on a whole number, and then does not.
-        grown = max(SCALE, self.rage_zoom(1.0))     # pixels per cell, full swell
+        # again from HEADROOM. The sprite is scaled to a whole number of
+        # pixels per cell, so the two sums round differently and the window
+        # comes out a few pixels too small -- which stays invisible for as
+        # long as SCALE * HEADROOM lands on a whole number, and then does not.
+        grown = max(SCALE, self.window_cell())      # pixels per cell, padded
         pad_w = GRID_W * (grown - SCALE)
         pad_h = GRID_H * (grown - SCALE)
         self.ox, self.oy = pad_w, pad_h
@@ -952,8 +892,6 @@ class Totoro:
     def repaint(self):
         self.canvas.delete("ui")
         self.hits = {}
-        if self.state == DONE:
-            return                      # the tantrum has the screen to itself
         R = self.R
         if self.state == IDLE:
             # laid out to match the avocado: number, MIN, task, rule, start
@@ -979,7 +917,10 @@ class Totoro:
             self.label("↵ START", self.cy + 0.52 * R, self.small, CREAM, hit="start")
             self.hits["start"] = (self.cx - 0.55 * R, self.cy + 0.48 * R,
                                   self.cx + 0.55 * R, self.cy + 0.68 * R)
-        elif self.state in (RUNNING, PAUSED):
+        else:
+            # DONE is drawn exactly as RUNNING, because that is what it is: a
+            # timer with nothing left on it. left is zero by then, so the
+            # digits read 00:00 over a face full of the spent colour.
             heading = (self.task or "focus").upper()[:14]
             self.label(heading, self.cy - 0.50 * R,
                        self.fit(heading, self.cy - 0.50 * R, self.small), TAN)
@@ -987,12 +928,14 @@ class Totoro:
                        TAN if self.state == PAUSED else CREAM, bold=True)
             if self.state == PAUSED:
                 self.label("PAUSED", self.cy + 0.44 * R, self.tiny, TAN)
+        if self.state == DONE:
+            # The face stays, the controls do not. Nothing is clickable while
+            # it rains: a click anywhere clears the shower, so a button would
+            # only be a smaller target for the thing the whole widget already
+            # does. quit() refuses in this state for the same reason.
+            return
         self.corner_button("pin", 38, "▲" if self.pinned else "▼", self.pinned)
-        # Level with the arrow, on his other flank. Drawn in every state this
-        # method reaches, which is all of them except DONE -- repaint() has
-        # already returned by then, so the tantrum keeps the screen to itself
-        # and there is no button to click while he is swelling.
-        self.exit_button()
+        self.exit_button()              # level with the arrow, other flank
         if self.state in (RUNNING, PAUSED):
             self.reset_button()
 
@@ -1138,7 +1081,7 @@ class Totoro:
         self.dance_seq += 1                  # stop any animation in flight
         self.alarm_stop.set()
         self.bits = []
-        self.canvas.delete("boom")
+        self.canvas.delete("shower")
         self.canvas.itemconfigure(self.disc, fill=DISC_DARK, state="normal")
         self.canvas.itemconfigure(self.body, image=self.normal, state="normal")
         self.state = IDLE
@@ -1155,11 +1098,17 @@ class Totoro:
         self.last_paint = None
 
     def finish(self):
-        """Time is up. He loses his temper rather than celebrating."""
+        """Time is up. It starts raining on him rather than anything louder.
+
+        The belly is left exactly as the last second of the timer left it: the
+        face full of the spent colour, the digits reading zero. It used to be
+        hidden outright so the tantrum had the screen to itself, but there is
+        no tantrum now, and a finished timer that shows no time is a worse
+        thing to walk back to than one that does.
+        """
         self.state = DONE
         self.left = 0
-        self.draw_wedge(0.0)
-        self.canvas.itemconfigure(self.disc, state="hidden")
+        self.draw_wedge(1.0)
         self.show_me()                          # front and centre, and stays
         if LOG_SESSIONS:                        # off unless aimed at a vault
             append_log(self.task or "focus", self.total, self.session_kind,
@@ -1168,8 +1117,7 @@ class Totoro:
         self.alarm_stop = threading.Event()      # beeps run until he bursts
         alarm(self.alarm_stop)
         self.dance_seq += 1
-        self.angry = build_sprite(angry=True)
-        self.rage(0, self.dance_seq)
+        self.shower(0, self.dance_seq)
         self.last_paint = None
 
     def rest_at(self, zoom, dx=0, dy=0):
@@ -1182,110 +1130,84 @@ class Totoro:
                            self.win_h - GRID_H * zoom + dy)
 
     @staticmethod
-    def rage_zoom(t):
-        """Pixel size at `t` through the tantrum, from resting to GROW_TO."""
-        t = min(1.0, max(0.0, t))
-        return max(1, round(SCALE * (1.0 + (GROW_TO - 1.0) * t)))
+    def window_cell():
+        """Pixels per cell the window is sized for.
 
-    def rage(self, step, seq=None):
-        """Swell, redden and shake for RAGE_MS, then burst."""
-        if seq is not None and seq != self.dance_seq:
-            return
-        t = step * RAGE_STEP_MS / RAGE_MS
-        if t >= 1.0:
-            self.boom(0, seq)
-            return
-        zoom = self.rage_zoom(t)
-        self.frame = rage_photo(self.angry, t, zoom)    # keep a reference
-        self.canvas.itemconfigure(self.body, image=self.frame)
-        shake = round(SCALE * 0.3 * t)                  # worse as he swells
-        jitter = (random.randint(-shake, shake), random.randint(-shake, shake))
-        self.rest_at(zoom, *(jitter if shake else (0, 0)))
-        self.root.after(RAGE_STEP_MS, self.rage, step + 1, seq)
-
-    # He used to fly apart into leaves, acorns and soot sprites, all three at
-    # once and in a full circle. Three palettes, none of them his own, and at
-    # four sprite pixels a frame most of it crossed the window edge within a
-    # quarter of a second and was clipped mid-flight along a boundary nobody
-    # can see. It read as three effects firing at the same time.
-    #
-    # What replaced it is the one image anyone who has seen the film can
-    # picture: the umbrella at the bus stop in the rain. It solves the mess as
-    # well as the theme. Rain falls vertically, so nothing has to leave
-    # sideways, and the streaks wrap from the bottom back to the top, so it
-    # rains for the whole burst instead of spraying once. One palette, and it
-    # is nearly the clock face's already -- the film's night scenes are indigo
-    # and blue-black with a single warm thing in frame, which here is the
-    # canopy. Miyazaki's brief to Kazuo Oga was "subdued but beautiful" and
-    # specifically not raw primary colour, which is why the red is a brick and
-    # not a pillarbox.
-    RAIN_COLOURS = ("#3f5f6b", "#56808e", "#7aa3ab")    # far, middle, near
-    CANOPY = "#9c4a4e"
-    CANOPY_LIT = "#bb6164"
-    CANOPY_EDGE = "#5e2b2e"
-    SHAFT = "#3a2e2a"
-    DROP = "#cfe3e8"
-    UMB_W, UMB_H = 24, 15                               # in sprite pixels
-
-    def burst_centre(self):
-        """Where he was standing, which is where the umbrella goes.
-
-        Taken from the renderer's own number rather than SCALE * GROW_TO. The
-        two agree only while that product lands on a whole number, which is
-        exactly the trap in DESIGN.md that the window padding fell into: at
-        SCALE 6 the sprite is 8 pixels a cell and this sum says 8.25, so the
-        umbrella would stand a few pixels off from his own footprints.
+        The sprite scales to a whole number of pixels per cell, so anything
+        that has to agree with the window's size has to round the same way the
+        sprite does. Working it out separately as SCALE * HEADROOM is the trap
+        in DESIGN.md: the two sums agree only while that product lands on a
+        whole number, and where it does not the padding came out short by up
+        to 24 pixels.
         """
-        big = max(SCALE, self.rage_zoom(1.0))
-        return (self.win_w - GRID_W * big / 2, self.win_h - GRID_H * big / 2)
+        return max(1, round(SCALE * HEADROOM))
 
-    def boom(self, step, seq=None):
-        """He pops, and the bus stop in the rain is what is left standing."""
+    # Rain, in three depths. The colours are the film's night palette, which
+    # is very nearly the clock face's already: indigo and blue-black. Kazuo
+    # Oga's brief from Miyazaki was "subdued but beautiful" and specifically
+    # not raw primary colour, so none of these is far off the greys he is
+    # already drawn in.
+    RAIN_COLOURS = ("#3f5f6b", "#56808e", "#7aa3ab")    # far, middle, near
+
+    def shiver(self, t):
+        """How far off his mark he is now, in pixels. Never right or down.
+
+        He rests in the bottom-right corner with his own edges on the
+        window's, and all the spare room is up and to the left of him. Shaking
+        him evenly about his mark therefore put half of every shiver outside
+        the window, where it was clipped against an edge nobody can see. The
+        range is shifted instead of narrowed, so the distance he travels is
+        still the distance measured off the reference -- he just travels it on
+        the side where there is room.
+
+        It damps to nothing over the tail, which lands him back exactly on his
+        mark rather than stopping wherever the last offset happened to be.
+        """
+        calm = min(1.0, (1.0 - t) / SHAKE_SETTLE)
+        return (round((self.shake[0] - SHAKE_X) * SCALE * calm),
+                round((self.shake[1] - SHAKE_Y) * SCALE * calm))
+
+    def shower(self, step, seq=None):
+        """It rains on him, and he shivers in it until it passes.
+
+        He stays exactly the size he is, and his belly keeps the clock face it
+        had a moment ago, now reading zero. The finish used to swell him by a
+        third and burst him, which is what the window's spare room was for;
+        the room is still there and the rain falls through it.
+        """
         if seq is not None and seq != self.dance_seq:
             return
         if step == 0:
-            self.alarm_stop.set()               # the beeping stops on the pop
-            play_boom()
-            self.canvas.itemconfigure(self.body, state="hidden")
-            # seeded, so it is already raining on the first frame rather than
-            # starting with a clear sky and a sheet of drops arriving together
-            self.bits = [self.new_streak(seeded=True) for _ in range(BOOM_RAIN)]
-            self.drops = []
+            # seeded, so it is raining on the first frame rather than opening
+            # on a clear sky with a sheet of drops arriving together
+            self.bits = [self.new_streak(seeded=True)
+                         for _ in range(SHOWER_RAIN)]
+            self.shake = (0.0, 0.0)
 
-        self.canvas.delete("boom")
-        t = step * BOOM_STEP_MS / BOOM_MS
+        self.canvas.delete("shower")
+        t = step * SHOWER_STEP_MS / SHOWER_MS
         if t >= 1.0:
-            self.canvas.itemconfigure(self.body, image=self.normal,
-                                      state="normal")
             self.reset()
             return
 
-        # it springs open, holds, then collapses shut, while the rain thins
-        # over the same tail -- so the screen empties rather than blinking out
-        if t < UMBRELLA_OPEN:
-            s = t / UMBRELLA_OPEN
-            # easeOutBack: it overshoots a little past full width and settles,
-            # which is what an umbrella catching the air actually does
-            op = 1 + 2.70158 * (s - 1) ** 3 + 1.70158 * (s - 1) ** 2
-        elif t > 1 - UMBRELLA_SHUT:
-            op = max(0.0, (1 - t) / UMBRELLA_SHUT)
-        else:
-            op = 1.0
-        wet = 1.0 if t < 0.72 else max(0.0, (1.0 - t) / 0.28)
+        # A new offset every few frames, not every frame. Measured off the
+        # reference, it holds one for three or four frames and then jumps;
+        # resampling every frame reads as a buzz instead of a shiver.
+        if step % SHAKE_HOLD == 0:
+            self.shake = (random.uniform(-SHAKE_X, SHAKE_X),
+                          random.uniform(-SHAKE_Y, SHAKE_Y))
+        self.rest_at(SCALE, *self.shiver(t))
 
-        # order is depth: rain behind, then the canopy, then what runs off it
+        wet = 1.0 if t < 0.74 else max(0.0, (1.0 - t) / 0.26)
         self.rain(wet)
-        if op > 0.02:
-            self.umbrella(op)
-        self.splash(wet, spawn=op > 0.6 and wet > 0.3)
-        self.root.after(BOOM_STEP_MS, self.boom, step + 1, seq)
+        self.root.after(SHOWER_STEP_MS, self.shower, step + 1, seq)
 
     def new_streak(self, seeded=False):
         """One streak of rain, in one of three depths.
 
-        Far rain is dim, short, thin and slow; near rain is none of those. That
-        difference is the whole illusion -- a single colour at a single speed
-        looks like falling dashes, not weather.
+        Far rain is dim, short, thin and slow; near rain is none of those.
+        That difference is the whole illusion -- one colour at one speed looks
+        like falling dashes rather than weather.
         """
         lane = random.randrange(3)
         return {
@@ -1304,111 +1226,29 @@ class Totoro:
         The wrap is what makes it rain. At these speeds a fixed set of drops
         has crossed the window in under a fifth of a second, which is a spray.
         """
-        for i, s in enumerate(self.bits):
-            s["x"] += s["vx"]
-            s["y"] += s["vy"]
-            if s["y"] - s["len"] > self.win_h or s["x"] + s["len"] < 0:
-                self.bits[i] = s = self.new_streak()
-            ln = s["len"] * wet
+        for i, st in enumerate(self.bits):
+            st["x"] += st["vx"]
+            st["y"] += st["vy"]
+            if st["y"] - st["len"] > self.win_h or st["x"] + st["len"] < 0:
+                self.bits[i] = st = self.new_streak()
+            ln = st["len"] * wet
             if ln < 1.0:
                 continue
             # the streak lies along its own path, so its slant and the slant
             # of its fall agree instead of fighting
-            self.canvas.create_line(s["x"] - s["vx"] / s["vy"] * ln,
-                                    s["y"] - ln, s["x"], s["y"],
-                                    fill=self.RAIN_COLOURS[s["lane"]],
+            self.canvas.create_line(st["x"] - st["vx"] / st["vy"] * ln,
+                                    st["y"] - ln, st["x"], st["y"],
+                                    fill=self.RAIN_COLOURS[st["lane"]],
                                     width=max(1, round(SCALE *
-                                                       (0.16 + 0.08 * s["lane"]))),
-                                    tags="boom")
-
-    def umbrella(self, op):
-        """A dome, a sagging hem, ribs, a shaft and a hook.
-
-        `op` opens it. Width grows from nothing but height only from a little
-        under half, because that is the way an umbrella opens: outwards, not
-        upwards.
-        """
-        cx, cy = self.burst_centre()
-        rw = self.UMB_W * SCALE * op
-        rh = self.UMB_H * SCALE * (0.45 + 0.55 * op)
-        if rw < SCALE:
-            return
-        panels = 5
-        sag = rh * 0.22
-        pts = []
-        for i in range(25):                     # the dome, left rim to right
-            a = math.pi * (1 + i / 24)
-            pts += [cx + rw * math.cos(a), cy + rh * math.sin(a)]
-        for q in range(panels):                 # the hem, sagging back again
-            notch = cx + rw - 2 * rw * (q + 1) / panels
-            pts += [notch + rw / panels, cy + sag, notch, cy]
-        self.canvas.create_polygon(pts, fill=self.CANOPY,
-                                   outline=self.CANOPY_EDGE,
-                                   width=max(1, SCALE // 3), tags="boom")
-        for q in range(1, panels):              # ribs, apex down to each notch
-            self.canvas.create_line(cx, cy - rh,
-                                    cx + rw - 2 * rw * q / panels, cy,
-                                    fill=self.CANOPY_EDGE,
-                                    width=max(1, SCALE // 4), tags="boom")
-        # style="arc" matters: a pieslice this thin is the bug in DESIGN.md,
-        # where Tk paints the whole disc instead of the sliver asked for
-        self.canvas.create_arc(cx - rw, cy - rh, cx + rw, cy + rh,
-                               start=112, extent=48, style="arc",
-                               outline=self.CANOPY_LIT,
-                               width=max(1, SCALE // 3), tags="boom")
-        shaft = rh * 1.5
-        # from the hem rather than the apex: the canopy is already drawn, so a
-        # shaft starting any higher would be painted on top of its own fabric
-        self.canvas.create_line(cx, cy + sag, cx, cy + shaft, fill=self.SHAFT,
-                                width=max(1, round(SCALE * 0.5)), tags="boom")
-        hook = rh * 0.34                        # the J is what stops it
-        self.canvas.create_line(cx, cy + shaft,                # being a parasol
-                                cx - hook * 0.35, cy + shaft + hook,
-                                cx - hook * 1.35, cy + shaft + hook * 0.7,
-                                smooth=True, fill=self.SHAFT,
-                                width=max(1, round(SCALE * 0.45)), tags="boom")
-        self.canvas.create_line(cx, cy - rh, cx, cy - rh * 1.15,
-                                fill=self.SHAFT,
-                                width=max(1, round(SCALE * 0.4)), tags="boom")
-
-    def splash(self, wet, spawn):
-        """Rain coming off the canopy.
-
-        It is the point of the scene -- in the film the rain drumming on the
-        umbrella is what delights him, and he jumps to shake more of it out of
-        the trees. Without this the canopy is a shape the weather ignores.
-        """
-        if spawn:
-            cx, cy = self.burst_centre()
-            for _ in range(BOOM_DROPS):
-                a = math.pi * (1 + random.random())
-                sp = random.uniform(0.7, 1.6) * SCALE
-                self.drops.append({
-                    "x": cx + self.UMB_W * SCALE * math.cos(a),
-                    "y": cy + self.UMB_H * SCALE * math.sin(a),
-                    "vx": math.cos(a) * sp,
-                    "vy": math.sin(a) * sp * 0.6,   # up and out, then gravity
-                    "life": random.randint(6, 13),
-                })
-        live = []
-        # they shrink with the rain they came from. Held at a fixed size they
-        # outlast the streaks and the last quarter second is white specks
-        # hanging in a clearing sky
-        r = SCALE * 0.22 * wet
-        for d in self.drops:
-            d["vy"] += 0.5 * SCALE
-            d["x"] += d["vx"]
-            d["y"] += d["vy"]
-            d["life"] -= 1
-            if d["life"] <= 0 or d["y"] - r > self.win_h:
-                continue
-            live.append(d)
-            if r < 0.7:
-                continue
-            self.canvas.create_oval(d["x"] - r, d["y"] - r, d["x"] + r,
-                                    d["y"] + r, fill=self.DROP, outline="",
-                                    tags="boom")
-        self.drops = live
+                                                       (0.16 + 0.08 * st["lane"]))),
+                                    tags=("shower", "shower-near" if st["lane"] == 2
+                                          else "shower-far"))
+        # the two far depths go behind him, the near one stays in front, which
+        # is what puts him inside the weather rather than in a photograph of
+        # it. Everything drawn this frame starts above him, so only the far
+        # rain has to move; the clock face and the digits are his own items
+        # and are left where they are.
+        self.canvas.tag_lower("shower-far", self.body)
 
     def blink(self):
         if self.state == IDLE and self.editing:
@@ -1545,30 +1385,23 @@ def selftest():
         finally:
             root.destroy = real_destroy
             w.state = IDLE
-        # the window has to hold him at full swell, or he bursts out of his own
-        # edges. The padding and the sprite size used to be worked out by two
-        # separate sums that agreed only while SCALE * GROW_TO landed on a
-        # whole number. test_timer.py catches this too, but that suite does not
-        # run in CI, and this is the check that would have caught it there.
-        grown = w.rage_zoom(1.0)
+        # the window has to hold the whole scene, or its edge clips along a
+        # boundary nobody can see. The padding and the sprite size used to be
+        # worked out by two separate sums that agreed only while
+        # SCALE * HEADROOM landed on a whole number. test_timer.py catches this
+        # too, but that suite does not run in CI, and this is the check that
+        # would have caught it there.
+        grown = w.window_cell()
         assert w.win_w >= GRID_W * grown, (
-            f"window {w.win_w}px too narrow for his full swell "
+            f"window {w.win_w}px too narrow for its padding "
             f"of {GRID_W * grown}px")
         assert w.win_h >= GRID_H * grown, (
-            f"window {w.win_h}px too short for his full swell "
+            f"window {w.win_h}px too short for its padding "
             f"of {GRID_H * grown}px")
-        # the umbrella is sized in sprite pixels inside that same window, so it
-        # is open to the same drift. It springs about a tenth past full width
-        # before it settles, so the overshoot is what has to fit, not the
-        # resting size.
-        cx, cy = w.burst_centre()
-        over = max(1 + 2.70158 * (p / 40 - 1) ** 3 + 1.70158 * (p / 40 - 1) ** 2
-                   for p in range(41))
-        half = w.UMB_W * SCALE * over
-        assert cx - half >= 0 and cx + half <= w.win_w, (
-            f"the umbrella is {2 * half:.0f}px across at full open, "
-            f"and the window is only {w.win_w}px")
-        assert cy + w.UMB_H * SCALE * 1.84 <= w.win_h,             "the umbrella's handle hangs out through the bottom of the window"
+        # he shivers up and to the left into that same padding, so the
+        # window has to hold him at his furthest offset, not just at rest
+        assert w.ox - 2 * SHAKE_X * SCALE >= 0 and w.oy - 2 * SHAKE_Y * SCALE >= 0, \
+            "the shiver reaches off the top-left of the window"
     finally:
         STATE_FILE = keep
         root.destroy()
@@ -1597,14 +1430,12 @@ def selftest():
     else:
         play_beep()
         assert _SOUND_ERROR is None, f"the beep would not play: {_SOUND_ERROR}"
-        play_boom()
-        assert _SOUND_ERROR is None, f"the bang would not play: {_SOUND_ERROR}"
 
     # a waveform that starts or ends on a jump clicks in the speaker
     import io as _io
     import struct as _struct
     import wave as _wave
-    for label, raw in (("beep", _beep_wav()), ("boom", _boom_wav())):
+    for label, raw in (("beep", _beep_wav()),):
         wf = _wave.open(_io.BytesIO(raw))
         cnt = wf.getnframes()
         d = _struct.unpack(f"<{cnt}h", wf.readframes(cnt))

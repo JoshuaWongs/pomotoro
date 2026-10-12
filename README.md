@@ -12,7 +12,7 @@ so built my own to keep me on task!
 
 He lives in the bottom-right corner of the screen with a clock face on his
 belly. Type a length, type what you are working on, press start. When the time
-runs out he loses his temper and bursts into camphor leaves.
+runs out it comes on to rain, and he shivers in it until it passes.
 
 ## What you need
 
@@ -93,20 +93,20 @@ by the time you let the button go the window was already gone and the click
 landed on whatever was behind him. On the desktop that opened the desktop's own
 right-click menu every time you shut him.
 
-**When it finishes.** He loses his temper. He comes to the front of everything,
-the clock face vanishes, his brows crash down, and over a couple of seconds he
-swells by about a third while turning steadily red and shaking harder. Then he
-pops, and out comes the forest: camphor leaves thrown up and fluttering back
-down, acorns tumbling, and a scatter of soot sprites blinking their white eyes
-before drifting away. Those are his three things in the film — the acorns he
-gives the girls, the tree he lives in, and the susuwatari.
+**When it finishes.** It starts raining on him. He comes to the front of
+everything and shivers where he stands — the same size he always is, just
+unable to keep still — while rain falls past him in three depths, the nearest
+of it crossing in front of him. His belly keeps the clock face it had a second
+ago, now full of the spent colour and reading `00:00`, so what you walk back to
+still says what it was doing. After about a second and a half the shiver damps
+out, he settles back onto his mark, and the next timer is waiting.
 
-A beep sounds every half second right up to the moment he pops, then a low
-crunch as he does.
+A beep sounds every half second while it rains.
 
-He grows out of the corner, up and to the left, so he never swells off the edge
-of the screen. Clicking him, or pressing Return, cuts the tantrum short and
-drops him straight back to the next timer.
+The shiver only ever carries him up and to the left, because he rests with his
+own edges against the window's and all the spare room is on that side. Clicking
+him, or pressing Return, cuts it short and drops him straight to the next
+timer.
 
 **He always ends up in front.** Whatever the arrow said before, a finished timer
 brings him out and leaves him there, so you cannot miss one. Put him back behind
@@ -209,11 +209,12 @@ bitmap font, the sprite geometry, the icon container, the synthesised sounds,
 and that the widget still builds — a missing colour or a typo in the drawing
 code is invisible to every other check and only shows up on launch.
 
-The second has 20 sections and feeds clicks at real on-screen coordinates
+The second has 21 sections and feeds clicks at real on-screen coordinates
 through his click handler: pausing,
 resetting, mashing the buttons in random order, the caret landing where you
 clicked, the progress slice agreeing with the digits to within a twentieth of a
-degree, the beeps not drifting, and the tantrum leaving nothing behind.
+degree, the beeps not drifting, the shiver never carrying him out of his own
+window, and the rain leaving nothing behind.
 
 **What the badge covers.** CI runs the self-test on Python 3.9, 3.11, 3.13 and
 3.14 on Windows. It does not run `test_timer.py`, which measures beep timing against
@@ -236,8 +237,10 @@ transparent window positioned with Win32 calls through `ctypes`.
 The layout is modelled on the pixel avocado timer in Tina Huang's
 [Learn 10X Faster In 10 Minutes](https://www.youtube.com/watch?v=sbmP6i-MChk)
 (around 8:50) — a chunky character with the clock on his belly, a MIN label, a
-task line, a dotted rule and START. The beep pitch and spacing were measured
-from that video rather than guessed.
+task line, a dotted rule and START. The beep and the shiver were both measured
+off that video rather than guessed: the beep is an 880 Hz square wave every
+500 ms, and the shiver holds an offset for three or four frames before jumping,
+travelling about half again as far sideways as it does up and down.
 
 Totoro is a character created by Hayao Miyazaki and owned by Studio Ghibli.
 This is unaffiliated fan art, made for my own desk. The [MIT license](LICENSE)

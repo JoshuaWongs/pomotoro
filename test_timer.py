@@ -79,6 +79,15 @@ def check(label):
                  f"(want {want:.4f})")
         if want < -0.0001 and not wedge_shown():
             note(f"{label}: wedge hidden while {g.state} with {want:.4f} deg run")
+    elif g.state == P.DONE:
+        # a finished timer keeps its face, filled right up with the spent
+        # colour. It used to be hidden for the tantrum; there is no tantrum
+        # now, and a finished timer showing no time is a poor thing to walk
+        # back to
+        if not wedge_shown():
+            note(f"{label}: the finished timer has no face left")
+        elif ext > -359.0:
+            note(f"{label}: finished, but the face is only {-ext:.1f} deg full")
     else:
         if wedge_shown():
             note(f"{label}: wedge still visible while {g.state}")
@@ -206,26 +215,29 @@ finally:
 if not mash_closed:
     note("400 random clicks never once hit the X; the mash is not reaching it")
 
-print("--- 8. he stays pinned to his corner while he swells ---")
+print("--- 8. he shivers without ever leaving his corner ---")
 g.reset_to_standard()
-zooms = []
-for i in range(21):
-    t = i / 20
-    z = g.rage_zoom(t)
-    zooms.append(z)
-    g.rest_at(z)
+# driven through the real shiver() rather than a copy of its sums, which is
+# the only way this catches a change to how the offset is worked out
+far = 0
+for i in range(400):
+    g.shake = (P.random.uniform(-P.SHAKE_X, P.SHAKE_X),
+               P.random.uniform(-P.SHAKE_Y, P.SHAKE_Y))
+    dx, dy = g.shiver(P.random.random() * 0.999)
+    g.rest_at(P.SCALE, dx, dy)
     x, y = g.canvas.coords(g.body)
-    if round(x + P.GRID_W * z) != g.win_w or round(y + P.GRID_H * z) != g.win_h:
-        note(f"at {t:.2f} his corner sits at "
-             f"{(x + P.GRID_W * z, y + P.GRID_H * z)}, window {(g.win_w, g.win_h)}")
+    far = max(far, abs(x - g.ox), abs(y - g.oy))
     if x < 0 or y < 0:
-        note(f"at {t:.2f} he has swollen off the top-left of the window")
-if zooms != sorted(zooms):
-    note("his size went backwards partway through")
-if zooms[0] != P.SCALE:
-    note(f"he does not start at his resting size ({zooms[0]} vs {P.SCALE})")
-if zooms[-1] != round(P.SCALE * P.GROW_TO):
-    note(f"he tops out at {zooms[-1]}, expected {round(P.SCALE * P.GROW_TO)}")
+        note(f"an offset of {(dx, dy)} shook him off the top-left")
+    if x + P.GRID_W * P.SCALE > g.win_w or y + P.GRID_H * P.SCALE > g.win_h:
+        note(f"an offset of {(dx, dy)} shook him out of the window")
+if far < P.SCALE:
+    note(f"400 offsets never moved him one whole sprite pixel ({far}px)")
+# the very end of the shower has to land him back exactly on his mark
+g.rest_at(P.SCALE, *g.shiver(1.0))
+x, y = g.canvas.coords(g.body)
+if (round(x), round(y)) != (g.ox, g.oy):
+    note(f"the shiver does not settle back onto his mark, at {(x, y)}")
 g.rest_at(P.SCALE)
 
 print("--- 9. real clock, with pauses, must never run backwards ---")
@@ -307,60 +319,65 @@ if g.caret_at != len(g.minutes_text):
     note(f"caret past the end was not clamped, at {g.caret_at}")
 g.reset_to_standard()
 
-print("--- 12. the tantrum leaves nothing behind ---")
+print("--- 12. the shower leaves nothing behind ---")
 g.reset_to_standard()
 g.minutes_text = ".1"; g.begin(); g.left = 0.0
 g.finish(); root.update()
 if g.state != P.DONE:
-    note("finish did not start the tantrum")
-if g.canvas.itemcget(g.disc, "state") != "hidden":
-    note("the clock face should be out of the way during the tantrum")
+    note("finish did not start the shower")
+if g.canvas.itemcget(g.disc, "state") == "hidden":
+    note("the clock face should still be up while it rains")
+if P.fmt_clock(g.left) != "00:00":
+    note(f"the finished belly reads {P.fmt_clock(g.left)}, should read 00:00")
 g.repaint()
 if g.hits:
-    note(f"nothing should be clickable mid-tantrum, found {sorted(g.hits)}")
-grew = False
-deadline = P.time.monotonic() + (P.RAGE_MS + P.BOOM_MS) / 1000 + 2.0
+    note(f"nothing should be clickable mid-shower, found {sorted(g.hits)}")
+moved = False
+deadline = P.time.monotonic() + P.SHOWER_MS / 1000 + 2.0
 while g.state != P.IDLE and P.time.monotonic() < deadline:
     root.update()
-    if g.canvas.itemcget(g.body, "state") != "hidden":
-        x, _ = g.canvas.coords(g.body)
-        if x < g.ox - 1:
-            grew = True
+    x, y = g.canvas.coords(g.body)
+    if (round(x), round(y)) != (g.ox, g.oy):
+        moved = True
     P.time.sleep(0.03)
-if not grew:
-    note("he never actually swelled past his resting size")
+if not moved:
+    note("he never actually shivered off his resting spot")
 if g.state != P.IDLE:
-    note(f"the tantrum did not settle back to idle, left in {g.state}")
-if g.canvas.find_withtag("boom"):
-    note("explosion fragments were left on screen")
+    note(f"the shower did not settle back to idle, left in {g.state}")
+if g.canvas.find_withtag("shower"):
+    note("rain or umbrella was left on screen")
 if not g.alarm_stop.is_set():
     note("the beeping was never told to stop")
 if g.canvas.itemcget(g.body, "state") == "hidden":
-    note("he never came back after exploding")
+    note("he is still hidden after the shower")
 if g.canvas.itemcget(g.disc, "state") == "hidden":
     note("the clock face never came back")
 x, y = g.canvas.coords(g.body)
 if (round(x), round(y)) != (g.ox, g.oy):
     note(f"he came back at {(x, y)}, should rest at {(g.ox, g.oy)}")
 
-print("--- 13. the swell reaches full size and keeps time with the alarm ---")
-last = int(P.RAGE_MS / P.RAGE_STEP_MS) - 1
-zoom = max(1, round(P.SCALE * (1.0 + (P.GROW_TO - 1.0)
-                              * last * P.RAGE_STEP_MS / P.RAGE_MS)))
-if zoom < round(P.SCALE * P.GROW_TO) - 1:
-    note(f"he only reaches {zoom / P.SCALE:.2f}x, asked for {P.GROW_TO}x")
-expected_beeps = P.RAGE_MS / P.BEEP_PERIOD_MS
-if expected_beeps < 4:
-    note(f"only {expected_beeps:.1f} beeps fit in the rage; too few to register")
-# the window has to be able to hold him at full size
-need_w = P.GRID_W * round(P.SCALE * P.GROW_TO)
-need_h = P.GRID_H * round(P.SCALE * P.GROW_TO)
+print("--- 13. the shower is long enough to read, and to be heard ---")
+frames = int(P.SHOWER_MS / P.SHOWER_STEP_MS)
+if frames < 20:
+    note(f"only {frames} frames in the shower; the rain will stutter")
+shivers = frames / P.SHAKE_HOLD
+if shivers < 8:
+    note(f"only {shivers:.0f} offsets over the shower; too few to read as a shiver")
+# the damping has to start before the last frame or he stops mid-shiver
+if P.SHAKE_SETTLE <= 1.0 / frames:
+    note("the shiver is not damped for long enough to settle before it ends")
+expected_beeps = P.SHOWER_MS / P.BEEP_PERIOD_MS
+if expected_beeps < 3:
+    note(f"only {expected_beeps:.1f} beeps fit in the shower; too few to register")
+# the window has to be able to hold the whole scene
+need_w = P.GRID_W * g.window_cell()
+need_h = P.GRID_H * g.window_cell()
 if g.win_w < need_w or g.win_h < need_h:
-    note(f"window {(g.win_w, g.win_h)} cannot hold him at {(need_w, need_h)}")
+    note(f"window {(g.win_w, g.win_h)} cannot hold its padding {(need_w, need_h)}")
 
-print("--- 14. the beeps stay even, and run right up to the bang ---")
+print("--- 14. the beeps stay even, and run right through the shower ---")
 def measure_beeps():
-    """Run the alarm for one rage with a stubbed beep, return onsets + stop."""
+    """Run the alarm for one shower with a stubbed beep: onsets + stop."""
     onsets = []
     real_beep = P.play_beep
     P.play_beep = lambda: (onsets.append(P.time.monotonic()),
@@ -368,7 +385,7 @@ def measure_beeps():
     stop = threading.Event()
     try:
         P.alarm(stop)
-        P.time.sleep(P.RAGE_MS / 1000)
+        P.time.sleep(P.SHOWER_MS / 1000)
         stopped_at = P.time.monotonic()
         stop.set()
         P.time.sleep(0.25)
@@ -387,9 +404,9 @@ def beep_problems(onsets, stopped_at):
     been catches that and ignores the noise.
     """
     out = []
-    want_count = round(P.RAGE_MS / P.BEEP_PERIOD_MS)
+    want_count = round(P.SHOWER_MS / P.BEEP_PERIOD_MS)
     if not (want_count - 1 <= len(onsets) <= want_count + 1):
-        out.append(f"heard {len(onsets)} beeps over the rage, expected about "
+        out.append(f"heard {len(onsets)} beeps over the shower, expected about "
                    f"{want_count}")
     for i, at in enumerate(onsets):
         drift = (at - onsets[0]) * 1000 - i * P.BEEP_PERIOD_MS
@@ -488,7 +505,7 @@ def run_to_idle(mins, task=""):
     g.left = 0.0
     g.finish()
     root.update()
-    end = P.time.monotonic() + (P.RAGE_MS + P.BOOM_MS) / 1000 + 2.5
+    end = P.time.monotonic() + P.SHOWER_MS / 1000 + 2.5
     while g.state != P.IDLE and P.time.monotonic() < end:
         root.update()
         P.time.sleep(0.03)
@@ -604,16 +621,16 @@ try:
         g.click(Ev((b[0] + b[2]) / 2, (b[1] + b[3]) / 2))
         if not closed:
             note(f"clicking the X while {label} did not close him")
-    # while he is bursting there is no button at all: he is swelling past
-    # where it sat, an alarm thread is running and frames are queued
+    # while it is raining there is no button at all: repaint() clears the
+    # UI and returns, an alarm thread is beeping and frames are queued
     g.state = P.DONE
     g.repaint()
     if "exit" in g.hits:
-        note("the X must not be drawn during the tantrum")
+        note("the X must not be drawn during the shower")
     closed.clear()
     g.quit()
     if closed:
-        note("quit must refuse while the tantrum is running")
+        note("quit must refuse while the shower is running")
 finally:
     root.destroy = real_destroy
     g.reset_to_standard()
