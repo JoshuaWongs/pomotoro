@@ -115,6 +115,11 @@ parts look wrong and are not. The ones that bite hardest:
 - The beep is measured, not chosen: an 880 Hz square wave, peaking 7 ms in and
   down to a tenth by 90 ms, every 500 ms. Two attempts to improve it by ear
   both landed nearly two octaves too high. Measure before changing it.
+- The clock face, the slice and every letter are canvas items of their own, not
+  part of the sprite image. Anything that moves him has to go through
+  `rest_at()`, which shifts the `him` tag and `cx`/`cy` by the same delta.
+  Placing `self.body` directly leaves his belly behind and leaves the stored
+  offset lying, so the next shiver moves his face by the wrong amount.
 
 ## Conventions
 

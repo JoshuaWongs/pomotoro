@@ -5,7 +5,7 @@ sessions.
 
 [![tests](https://github.com/JoshuaWongs/pomotoro/actions/workflows/tests.yml/badge.svg)](https://github.com/JoshuaWongs/pomotoro/actions/workflows/tests.yml)
 
-![Pomotoro running a timer and then losing his temper](assets/demo.gif)
+![Pomotoro running a timer, and then standing in the rain when it is up](assets/demo.gif)
 
 Got inspired by [Tina Huang's fun pomodoro timer](https://www.youtube.com/watch?v=sbmP6i-MChk)
 so built my own to keep me on task!
@@ -98,10 +98,13 @@ everything and shivers where he stands — the same size he always is, just
 unable to keep still — while rain falls past him in three depths, the nearest
 of it crossing in front of him. His belly keeps the clock face it had a second
 ago, now full of the spent colour and reading `00:00`, so what you walk back to
-still says what it was doing. After about a second and a half the shiver damps
-out, he settles back onto his mark, and the next timer is waiting.
+still says what it was doing. The clock face shivers with him rather than
+staying pinned where it was. After about three seconds the rain thins out, the
+shiver damps with it, he settles back onto his mark, and the next timer is
+waiting.
 
-A beep sounds every half second while it rains.
+A beep sounds every half second while it rains, the first of them on the same
+tick that the digits reach zero.
 
 The shiver only ever carries him up and to the left, because he rests with his
 own edges against the window's and all the spare room is on that side. Clicking

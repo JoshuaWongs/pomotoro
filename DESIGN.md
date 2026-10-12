@@ -71,7 +71,7 @@ first second and hits 00:00 exactly as it ends. Rounding down made it drop to
 49:59 the instant it started, which looked broken.
 
 **Finishing.** It comes on to rain. He comes to the front of everything and
-shivers in place for about a second and a half, the same size throughout, while
+shivers in place for about three seconds, the same size throughout, while
 rain falls past him in three depths — the far two behind him, the nearest in
 front, which is what puts him inside the weather rather than in a picture of
 it. The belly keeps its clock face, filled with the spent colour and reading
@@ -156,6 +156,14 @@ the other icons on the taskbar.
 ## Sound
 
 A beep every half second from the moment the timer ends until the rain stops.
+
+The first one has to land on zero, not after it. Two things used to delay it.
+The countdown ticks every 200 ms, so the finish was up to a tick late; the last
+tick before the end is now aimed at the end instead. And the first `_play` of a
+run costs about 16 ms it never pays again -- synthesis, a temp directory, a file
+write -- which is why `begin()` renders the beep rather than `finish()`.
+Measured across six runs with the deadline landing at different points between
+ticks, the first beep is now 0 to 3 ms after zero.
 It is synthesised into a WAV the first time it plays and kept in a temp folder
 for the rest of the run. The folder is deleted on
 exit. A run that never reaches exit -- Windows shutting down, or Task Manager --

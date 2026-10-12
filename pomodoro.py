@@ -47,8 +47,8 @@ DISC_CX, DISC_CY, DISC_R = 22, 47, 11.0     # belly clock, in sprite pixels
 # passes. He is the same size throughout, so the window is no longer sized
 # around a swell: it keeps HEADROOM worth of clear room up and to the left of
 # where he rests, which is the room the rain falls through.
-HEADROOM = 1.375                # window size as a multiple of the sprite
-SHOWER_MS = 1700                # the shiver and the rain, start to finish
+HEADROOM = 1.2                  # window size as a multiple of the sprite
+SHOWER_MS = 3000                # the shiver and the rain, start to finish
 SHOWER_STEP_MS = 45             # 37 frames; any slower and the rain strobes
 SHOWER_RAIN = 46                # streaks falling at any one moment
 
@@ -62,7 +62,7 @@ SHOWER_RAIN = 46                # streaks falling at any one moment
 SHAKE_X = 1.5                   # sprite pixels, peak
 SHAKE_Y = 1.0
 SHAKE_HOLD = 3                  # frames per offset, which is about 3.5 Hz
-SHAKE_SETTLE = 0.18             # of the shower spent damping back to still
+SHAKE_SETTLE = 0.15             # of the shower spent easing off
 
 PALETTE = {
     ".": KEY, "O": "#2f2f2f",
@@ -441,6 +441,21 @@ def play_beep():
     _play("beep", _beep_wav)
 
 
+def warm_beep():
+    """Render the beep before it is wanted, so the first one is not late.
+
+    The first _play costs about 16 ms it never pays again: synthesising the
+    waveform, making a private temp directory and writing the file. Paid at
+    the finish, that is 16 ms of silence exactly where the beep is supposed
+    to land, so it is paid when the timer starts instead.
+    """
+    global _SOUND_ERROR
+    try:
+        _sound_file("beep", _beep_wav)
+    except Exception as exc:
+        _SOUND_ERROR = exc
+
+
 def alarm(stop):
     """Beep on the half second until `stop` is set -- that is, until he bursts.
 
@@ -671,12 +686,18 @@ class Totoro:
         self.cx = self.ox + DISC_CX * SCALE
         self.cy = self.oy + DISC_CY * SCALE
         self.R = DISC_R * SCALE
+        # "him" is everything that has to travel with the sprite when he
+        # shivers: the clock face, the slice and, through rect() and label(),
+        # every panel and letter drawn on him. The sprite image itself is not
+        # tagged, because rest_at() places it by absolute coordinates.
         self.disc = self.canvas.create_oval(0, 0, 1, 1, fill=DISC_DARK,
                                             outline=DISC_EDGE,
-                                            width=max(1, SCALE // 3))
+                                            width=max(1, SCALE // 3),
+                                            tags="him")
         self.wedge = self.canvas.create_polygon(0, 0, 0, 0, 0, 0,
                                                 fill=DISC_LIT, outline="",
-                                                state="hidden")
+                                                state="hidden", tags="him")
+        self.offset = (0, 0)                # how far rest_at has shifted him
         self.place_disc()
         # every text size derives from the disc, so it all scales together
         self.big = max(2, round(1.5 * self.R / 29))
@@ -826,7 +847,7 @@ class Totoro:
     def rect(self, x0, y0, x1, y1, fill, **kw):
         """Every panel rectangle goes through here, so one tag clears them."""
         return self.canvas.create_rectangle(x0, y0, x1, y1,
-                                            fill=fill, tags="ui", **kw)
+                                            fill=fill, tags=("ui", "him"), **kw)
 
     def label(self, text, y, px, fill, cx=None, hit=None, bold=False):
         """Draw one line of bitmap text centred on cx; return its box."""
@@ -878,7 +899,7 @@ class Totoro:
         for dx in (r, -r):
             self.canvas.create_line(gx - dx, gy - r, gx + dx, gy + r,
                                     fill=DISC_EDGE, width=max(1, round(s / 2.5)),
-                                    capstyle="round", tags="ui")
+                                    capstyle="round", tags=("ui", "him"))
         self.hits["exit"] = (gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2)
 
     def reset_button(self):
@@ -890,11 +911,11 @@ class Totoro:
         r = s * 0.9
         self.canvas.create_arc(gx - r, gy - r, gx + r, gy + r,
                                start=20, extent=290, style="arc", outline=CREAM,
-                               width=max(1, round(s / 2.5)), tags="ui")
+                               width=max(1, round(s / 2.5)), tags=("ui", "him"))
         t = s * 0.55
         self.canvas.create_polygon(gx + r, gy - t, gx + r + t, gy + t * 0.3,
                                    gx + r - t, gy + t * 0.3, fill=CREAM,
-                                   outline="", tags="ui")
+                                   outline="", tags=("ui", "him"))
         self.hits["reset"] = (gx - s * 2, gy - s * 2, gx + s * 2, gy + s * 2)
 
     def repaint(self):
@@ -1073,6 +1094,7 @@ class Totoro:
         self.ends_at = time.monotonic() + self.total
         self.state = RUNNING
         self.draw_wedge(0.0)
+        warm_beep()                 # so the first beep is not 16 ms behind zero
         self.last_paint = None
 
     def reset_to_standard(self):
@@ -1099,7 +1121,7 @@ class Totoro:
             self.minutes_text, self.task, kind = self.pending
             self.loaded = (self.minutes_text, self.task, kind)
             self.pending = None
-        self.canvas.coords(self.body, self.ox, self.oy)
+        self.rest_at(SCALE)                  # back on his mark, face and all
         self.place_disc()
         self.repaint()
         self.apply_layer()
@@ -1116,26 +1138,43 @@ class Totoro:
         """
         self.state = DONE
         self.left = 0
+        # The alarm goes first. Everything below it costs milliseconds --
+        # save_state writes a file, apply_layer and lift are Win32 round
+        # trips -- and every one of them used to land between the clock
+        # reading zero and the first beep being heard.
+        self.alarm_stop = threading.Event()      # beeps run until the rain stops
+        alarm(self.alarm_stop)
         self.draw_wedge(1.0)
         self.show_me()                          # front and centre, and stays
         if LOG_SESSIONS:                        # off unless aimed at a vault
             append_log(self.task or "focus", self.total, self.session_kind,
                        log_dir=LOG_SESSIONS)
         self.queue_next()
-        self.alarm_stop = threading.Event()      # beeps run until he bursts
-        alarm(self.alarm_stop)
         self.dance_seq += 1
         self.shower(0, self.dance_seq)
         self.last_paint = None
 
     def rest_at(self, zoom, dx=0, dy=0):
-        """Pin the sprite by its bottom-right corner, whatever size it is.
+        """Pin the sprite by its bottom-right corner, and move his face with it.
 
-        Growing from that corner keeps his feet where they were and sends the
-        swell up and left, into the padding rather than off the screen.
+        Anchoring to that corner keeps his feet where they were and sends any
+        offset up and left, into the padding rather than off the screen.
+
+        The clock face and the lettering are canvas items of their own rather
+        than part of the sprite image, so moving the image alone left them
+        behind: he shivered out from under his own belly. They are shifted by
+        the change in offset rather than to an absolute spot, because
+        repaint() lays them out from cx/cy at moments this method does not
+        control, and cx/cy therefore has to carry the offset too.
         """
         self.canvas.coords(self.body, self.win_w - GRID_W * zoom + dx,
                            self.win_h - GRID_H * zoom + dy)
+        ddx, ddy = dx - self.offset[0], dy - self.offset[1]
+        self.offset = (dx, dy)
+        if ddx or ddy:
+            self.cx += ddx
+            self.cy += ddy
+            self.canvas.move("him", ddx, ddy)
 
     @staticmethod
     def window_cell():
@@ -1206,7 +1245,10 @@ class Totoro:
                           random.uniform(-SHAKE_Y, SHAKE_Y))
         self.rest_at(SCALE, *self.shiver(t))
 
-        wet = 1.0 if t < 0.74 else max(0.0, (1.0 - t) / 0.26)
+        # the rain thins out over the same tail the shiver damps over, so
+        # the weather and his shivering stop together rather than one of them
+        # carrying on alone after the other has finished
+        wet = min(1.0, (1.0 - t) / SHAKE_SETTLE)
         self.rain(wet)
         self.root.after(SHOWER_STEP_MS, self.shower, step + 1, seq)
 
@@ -1276,7 +1318,14 @@ class Totoro:
         if stamp != self.last_paint:
             self.last_paint = stamp
             self.repaint()
-        self.root.after(200, self.tick)
+        # A 200 ms tick is plenty for a clock that counts in seconds, but it
+        # made the finish up to 200 ms late, and the beep is the part you
+        # notice: it arrived after the digits already read 00:00. When the end
+        # is less than one tick away the next tick is aimed at it instead.
+        gap = 200
+        if self.state == RUNNING and 0 < self.left < 0.2:
+            gap = max(1, round(self.left * 1000))
+        self.root.after(gap, self.tick)
 
 
 # -------------------------------------------------------------------- test
@@ -1371,6 +1420,22 @@ def selftest():
         # down before the button came back up and the release reached whatever
         # lay underneath -- on the desktop, that opened the desktop's menu.
         assert not w.canvas.bind("<Button-3>"), "right-click should not be bound"
+
+        # The clock face has to shiver with him. It is a canvas item of its
+        # own, so moving the sprite image alone left it pinned to the window
+        # and he visibly slid out from under his own belly. The face is
+        # checked against the sprite, not against a remembered number, so it
+        # also catches a redraw that puts it back where it never moved from.
+        w.state = DONE
+        w.repaint()
+        for dx, dy in ((0, 0), (-7, -5), (-SCALE, 0), (-3, -11), (0, 0)):
+            w.rest_at(SCALE, dx, dy)
+            w.repaint()
+            bx, by = w.canvas.coords(w.body)
+            x0, y0, x1, y1 = w.canvas.coords(w.disc)
+            assert abs((x0 + x1) / 2 - (bx + DISC_CX * SCALE)) < 1.0 and \
+                abs((y0 + y1) / 2 - (by + DISC_CY * SCALE)) < 1.0, \
+                f"the clock face stayed behind at an offset of {(dx, dy)}"
         closed = []
         real_destroy = root.destroy
         root.destroy = lambda: closed.append(True)
