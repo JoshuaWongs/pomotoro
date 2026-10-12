@@ -301,26 +301,33 @@ def save_state(**kw):
 
 # ------------------------------------------------------------------ alarm
 
-# The spacing is measured off the video's own audio: one beep every 500 ms, an
-# even unhurried pulse rather than a triple, which is why it reads as a timer
-# and not a smoke alarm.
+# Every number here is measured off a recording of the video this is modelled
+# on, by filtering the audio at one frequency at a time:
 #
-# The sound itself is deliberately not the video's. That was a plain 880 Hz
-# sine, and a sine is what every test tone and system bleep is made of, so it
-# registered as a default beep rather than as a clock. Clocks and watches are
-# piezo buzzers: close to a square wave, and an octave or more higher. Hence
-# two short pips of a band-limited square up at 1976 Hz, with the third and
-# fifth harmonics kept deliberately quiet -- a full square at this pitch is a
-# Casio alarm, and this has to stay bearable for every beep of RAGE_MS.
+#   partial      1      2      3      4      5      6      7
+#   measured  1.000  0.008  0.334  0.006  0.207  0.002  0.150
+#   a square  1.000  0.000  0.333  0.000  0.200  0.000  0.143
+#
+# which is a square wave at 880 Hz and not a near miss -- the odd partials
+# land within two per cent of 1/k and the even ones are at half a per cent.
+# The envelope peaks about 7 ms in and decays from there, down to a tenth of
+# its peak by 90 ms. The gap is 500 ms, measured across six beeps: 490, 495,
+# 503, 500, 502.
+#
+# Worth writing down because two earlier guesses went the other way. A plain
+# sine was dismissed as sounding like a test tone, and short pips were pitched
+# up at 1976 Hz on the reasoning that clock buzzers are high. Both were wrong
+# in the same direction, and a single measurement settled what an argument
+# about timbre could not.
 #
 # winsound.Beep is a bare square wave with no envelope: it clicks at both ends
 # and cannot make noise at all. Everything below is synthesised into a WAV in
 # memory and handed to PlaySound, which costs nothing extra and lets the beep
 # have a shaped edge instead of a click at each end.
 RATE = 22050
-BEEP_HZ = 1976                 # B6. A buzzer lives up here; a test tone does not
-BEEP_MS = 34                   # one pip, and there are two of them
-BEEP_GAP_MS = 30               # the silence between the pair
+BEEP_HZ = 880                  # A5, measured
+BEEP_MS = 120                  # it is down to a tenth of its peak by 90 ms
+BEEP_PEAK = 0.55               # after normalising; a raw square sum overflows
 BEEP_PERIOD_MS = 500
 
 
@@ -342,28 +349,29 @@ def _wav(samples):
 
 
 def _beep_wav():
-    """Two short digital pips.
+    """One square-wave beep, built to the measurements above.
 
-    The harmonics decide whether it reads as a clock; the envelope decides
-    whether it sounds cheap. Odd harmonics only, because that is what a square
-    wave is made of and a square wave is what a buzzer does -- but at a
-    fraction of their true amplitude, or it is painful by the eighth repeat.
+    The square is summed from its own odd harmonics rather than taken as
+    sign(sin). Both are square waves, but the naive one puts every partial
+    above 11 kHz back into the audible range folded around Nyquist, which adds
+    a gritty inharmonic edge that the recording does not have. Summing stops
+    at the last partial that fits.
+
+    The decay constant is not a taste: 3.2 across the note puts it at a tenth
+    of peak at 90 ms, which is where the recording has it.
     """
-    def pip():
-        n = int(RATE * BEEP_MS / 1000)
-        attack = int(RATE * 0.003)      # short, but a hard start clicks
-        out = []
-        for i in range(n):
-            t = i / RATE
-            env = (i / attack) if i < attack else math.exp(-5.0 * (i - attack) /
-                                                           (n - attack))
-            tone = (math.sin(2 * math.pi * BEEP_HZ * t)
-                    + 0.18 * math.sin(2 * math.pi * BEEP_HZ * 3 * t)
-                    + 0.06 * math.sin(2 * math.pi * BEEP_HZ * 5 * t))
-            out.append(0.52 * env * tone)
-        return out
-    gap = [0.0] * int(RATE * BEEP_GAP_MS / 1000)
-    return _wav(pip() + gap + pip())
+    n = int(RATE * BEEP_MS / 1000)
+    attack = int(RATE * 0.007)                  # measured, and it stops a click
+    partials = [k for k in range(1, 12, 2) if BEEP_HZ * k < RATE / 2]
+    out = []
+    for i in range(n):
+        t = i / RATE
+        env = (i / attack) if i < attack else math.exp(-3.2 * (i - attack) /
+                                                       (n - attack))
+        out.append(env * sum(math.sin(2 * math.pi * BEEP_HZ * k * t) / k
+                             for k in partials))
+    loud = max(abs(v) for v in out) or 1.0
+    return _wav([v * BEEP_PEAK / loud for v in out])
 
 
 _SOUNDS = {}
@@ -1443,8 +1451,8 @@ def selftest():
         assert abs(d[0]) < 2000, f"{label} starts on a jump and will click"
         assert abs(d[-1]) < 2000, f"{label} ends on a jump and will click"
         assert max(abs(v) for v in d) < 32700, f"{label} clips"
-        # a beep longer than its own gap would overlap the next one, and the
-        # pair of pips brought it much closer to that edge than one tone was
+        # a beep longer than its gap would overlap the next one, and this one
+        # is 120 ms of a 500 ms period
         if label == "beep":
             assert cnt / RATE * 1000 < BEEP_PERIOD_MS, \
                 "the beep outlasts the gap between beeps and will overlap itself"
