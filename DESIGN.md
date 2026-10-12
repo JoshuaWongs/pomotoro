@@ -71,7 +71,7 @@ first second and hits 00:00 exactly as it ends. Rounding down made it drop to
 49:59 the instant it started, which looked broken.
 
 **Finishing.** It comes on to rain. He comes to the front of everything and
-shivers in place for about three seconds, the same size throughout, while
+shivers in place for four seconds, the same size throughout, while
 rain falls past him in three depths — the far two behind him, the nearest in
 front, which is what puts him inside the weather rather than in a picture of
 it. The belly keeps its clock face, filled with the spent colour and reading
@@ -155,15 +155,32 @@ the other icons on the taskbar.
 
 ## Sound
 
-A beep every half second from the moment the timer ends until the rain stops.
+A beep every half second from the moment the timer ends until the rain stops,
+and all of them in **one buffer**, exactly `SHOWER_MS` long.
 
-The first one has to land on zero, not after it. Two things used to delay it.
-The countdown ticks every 200 ms, so the finish was up to a tick late; the last
-tick before the end is now aimed at the end instead. And the first `_play` of a
-run costs about 16 ms it never pays again -- synthesis, a temp directory, a file
-write -- which is why `begin()` renders the beep rather than `finish()`.
-Measured across six runs with the deadline landing at different points between
-ticks, the first beep is now 0 to 3 ms after zero.
+It began as a thread firing one `PlaySound` per beep against a fixed schedule,
+which is the obvious shape and is wrong twice over. Windows opens the audio
+device on the first play of a run and can take a good fraction of a second over
+it, so the beep you are actually listening for -- the first -- arrives late and
+the next one or two land unevenly behind it. And a schedule a thread has to hit
+is something a test can only measure against the wall clock, loosely, which is
+why this suite's beep section could never run in CI.
+
+One buffer has no first play but its own. The gaps are sample counts rather
+than sleeps, so the spacing is exact by construction and `--selftest` reads it
+straight off the waveform; the alarm cannot outlast or fall short of the
+animation, because they are the same number. A click during the shower ends it
+with `PlaySound(None, SND_PURGE)`.
+
+What is left is getting it started on zero rather than after it. The countdown
+drives the slice as well as the digits, so it ticks at `TICK_MS` -- 33 ms, not
+the 200 ms it used to, which made the slice step visibly round for short
+timers -- and the last tick before the end is aimed at the end rather than at
+the usual interval. Rendering the buffer and opening the device are paid in
+`begin()` instead of `finish()`, the latter by playing a few milliseconds of
+silence. Measured across six runs with the deadline landing at different
+points between ticks, the alarm now starts 0.7 to 1.7 ms after zero, against
+up to 216 ms before.
 It is synthesised into a WAV the first time it plays and kept in a temp folder
 for the rest of the run. The folder is deleted on
 exit. A run that never reaches exit -- Windows shutting down, or Task Manager --

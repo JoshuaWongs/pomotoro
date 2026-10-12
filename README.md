@@ -99,12 +99,12 @@ unable to keep still — while rain falls past him in three depths, the nearest
 of it crossing in front of him. His belly keeps the clock face it had a second
 ago, now full of the spent colour and reading `00:00`, so what you walk back to
 still says what it was doing. The clock face shivers with him rather than
-staying pinned where it was. After about three seconds the rain thins out, the
-shiver damps with it, he settles back onto his mark, and the next timer is
-waiting.
+staying pinned where it was. After four seconds the rain thins out, the shiver
+damps with it, he settles back onto his mark, and the next timer is waiting.
 
-A beep sounds every half second while it rains, the first of them on the same
-tick that the digits reach zero.
+A beep sounds every half second for as long as it rains, the first of them on
+the same tick the digits reach zero. The rain and the beeping are one event and
+one length, so they cannot drift apart.
 
 The shiver only ever carries him up and to the left, because he rests with his
 own edges against the window's and all the spare room is on that side. Clicking

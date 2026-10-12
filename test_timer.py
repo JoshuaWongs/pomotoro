@@ -10,7 +10,6 @@ import ctypes
 import math
 import random
 import sys
-import threading
 import tkinter as tk
 
 import os
@@ -321,6 +320,13 @@ g.reset_to_standard()
 
 print("--- 12. the shower leaves nothing behind ---")
 g.reset_to_standard()
+hushed = False
+real_stop = P.stop_alarm
+def _spy_stop():
+    global hushed
+    hushed = True
+    real_stop()
+P.stop_alarm = _spy_stop
 g.minutes_text = ".1"; g.begin(); g.left = 0.0
 g.finish(); root.update()
 if g.state != P.DONE:
@@ -346,8 +352,8 @@ if g.state != P.IDLE:
     note(f"the shower did not settle back to idle, left in {g.state}")
 if g.canvas.find_withtag("shower"):
     note("rain or umbrella was left on screen")
-if not g.alarm_stop.is_set():
-    note("the beeping was never told to stop")
+if not hushed:
+    note("the alarm was left playing after the shower")
 if g.canvas.itemcget(g.body, "state") == "hidden":
     note("he is still hidden after the shower")
 if g.canvas.itemcget(g.disc, "state") == "hidden":
@@ -355,6 +361,7 @@ if g.canvas.itemcget(g.disc, "state") == "hidden":
 x, y = g.canvas.coords(g.body)
 if (round(x), round(y)) != (g.ox, g.oy):
     note(f"he came back at {(x, y)}, should rest at {(g.ox, g.oy)}")
+P.stop_alarm = real_stop
 
 print("--- 13. the shower is long enough to read, and to be heard ---")
 frames = int(P.SHOWER_MS / P.SHOWER_STEP_MS)
@@ -375,57 +382,37 @@ need_h = P.GRID_H * g.window_cell()
 if g.win_w < need_w or g.win_h < need_h:
     note(f"window {(g.win_w, g.win_h)} cannot hold its padding {(need_w, need_h)}")
 
-print("--- 14. the beeps stay even, and run right through the shower ---")
-def measure_beeps():
-    """Run the alarm for one shower with a stubbed beep: onsets + stop."""
-    onsets = []
-    real_beep = P.play_beep
-    P.play_beep = lambda: (onsets.append(P.time.monotonic()),
-                           P.time.sleep(0.07))   # starting a sound is not free
-    stop = threading.Event()
-    try:
-        P.alarm(stop)
-        P.time.sleep(P.SHOWER_MS / 1000)
-        stopped_at = P.time.monotonic()
-        stop.set()
-        P.time.sleep(0.25)
-    finally:
-        P.play_beep = real_beep
-    return onsets, stopped_at
-
-
-def beep_problems(onsets, stopped_at):
-    """What matters is drift, not jitter.
-
-    A thread woken late makes one gap long and the next short; that is the
-    machine being busy, not a bug. An alarm that sleeps for the gap instead of
-    aiming at a fixed schedule accumulates error, so every beep lands later
-    than the one before. Measuring each onset against where it should have
-    been catches that and ignores the noise.
-    """
-    out = []
-    want_count = round(P.SHOWER_MS / P.BEEP_PERIOD_MS)
-    if not (want_count - 1 <= len(onsets) <= want_count + 1):
-        out.append(f"heard {len(onsets)} beeps over the shower, expected about "
-                   f"{want_count}")
-    for i, at in enumerate(onsets):
-        drift = (at - onsets[0]) * 1000 - i * P.BEEP_PERIOD_MS
-        if abs(drift) > 70:
-            out.append(f"beep {i + 1} landed {drift:+.0f} ms from its slot; "
-                       f"the beeps are drifting apart")
-    if onsets and (stopped_at - onsets[-1]) * 1000 > P.BEEP_PERIOD_MS + 60:
-        out.append(f"the beeping died {int((stopped_at - onsets[-1]) * 1000)} ms "
-                   f"before the bang; it should carry on until then")
-    if [t for t in onsets if t > stopped_at + 0.08]:
-        out.append("beeps sounded after the bang")
-    return out
-
-# thread timing is load-sensitive, so one hiccup retries rather than failing
-problems = beep_problems(*measure_beeps())
-if problems:
-    problems = beep_problems(*measure_beeps())
-for msg in problems:
-    note(msg)
+print("--- 14. the alarm is started once, and never left running ---")
+# The beeps used to come from a thread, one PlaySound each against a fixed
+# schedule, and this section measured the gaps between them off the wall
+# clock -- which is why it has never been safe to run in CI. They are now one
+# buffer whose gaps are sample positions, so --selftest reads the spacing off
+# the waveform exactly and this section is left with the behaviour: the alarm
+# starts when the timer ends, once, and nothing is still playing afterwards.
+plays, purges = [], []
+real_play, real_stop = P.play_alarm, P.stop_alarm
+P.play_alarm = lambda: plays.append(P.time.monotonic())
+P.stop_alarm = lambda: purges.append(P.time.monotonic())
+try:
+    g.reset()
+    g.minutes_text = "5"
+    g.task = "alarm"
+    g.begin()
+    g.ends_at = P.time.monotonic()
+    g.left = 0.0
+    began = P.time.monotonic()
+    deadline = began + P.SHOWER_MS / 1000 + 2.0
+    while g.state != P.IDLE and P.time.monotonic() < deadline:
+        root.update()
+        P.time.sleep(0.01)
+    if len(plays) != 1:
+        note(f"the alarm was started {len(plays)} times, expected once")
+    if plays and (plays[0] - began) * 1000 > 250:
+        note(f"the alarm started {(plays[0] - began) * 1000:.0f} ms after zero")
+    if not purges:
+        note("the alarm was never purged, so it can outlast the rain")
+finally:
+    P.play_alarm, P.stop_alarm = real_play, real_stop
 
 print("--- 15. the arrow chooses his layer, and a manual reset keeps it ---")
 def topmost():

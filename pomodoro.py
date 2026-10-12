@@ -18,7 +18,6 @@ import json
 import os
 import random
 import sys
-import threading
 import time
 import tkinter as tk
 
@@ -40,6 +39,10 @@ BASE_SCALE = 4                 # screen pixels per sprite pixel at 100% scaling
 SCALE = BASE_SCALE
 KEY = "#ff00ff"                # magenta stands in for transparent
 
+TICK_MS = 33                    # 30 fps: the clock counts in seconds, but
+                                # the slice around it fills continuously, and
+                                # at the old 200 ms it visibly stepped round
+
 GRID_W, GRID_H = 44, 63
 DISC_CX, DISC_CY, DISC_R = 22, 47, 11.0     # belly clock, in sprite pixels
 
@@ -48,7 +51,7 @@ DISC_CX, DISC_CY, DISC_R = 22, 47, 11.0     # belly clock, in sprite pixels
 # around a swell: it keeps HEADROOM worth of clear room up and to the left of
 # where he rests, which is the room the rain falls through.
 HEADROOM = 1.2                  # window size as a multiple of the sprite
-SHOWER_MS = 3000                # the shiver and the rain, start to finish
+SHOWER_MS = 4000                # the shiver and the rain, start to finish
 SHOWER_STEP_MS = 45             # 37 frames; any slower and the rain strobes
 SHOWER_RAIN = 46                # streaks falling at any one moment
 
@@ -348,7 +351,7 @@ def _wav(samples):
     return buf.getvalue()
 
 
-def _beep_wav():
+def _beep_samples():
     """One square-wave beep, built to the measurements above.
 
     The square is summed from its own odd harmonics rather than taken as
@@ -371,7 +374,39 @@ def _beep_wav():
         out.append(env * sum(math.sin(2 * math.pi * BEEP_HZ * k * t) / k
                              for k in partials))
     loud = max(abs(v) for v in out) or 1.0
-    return _wav([v * BEEP_PEAK / loud for v in out])
+    return [v * BEEP_PEAK / loud for v in out]
+
+
+def _beep_wav():
+    """One beep on its own. Nothing plays this; the checks measure it."""
+    return _wav(_beep_samples())
+
+
+def _alarm_wav():
+    """The whole alarm as a single waveform, exactly as long as the rain.
+
+    This used to be one PlaySound per beep, fired from a thread that aimed at
+    a fixed schedule rather than sleeping for the gap. The schedule was the
+    easy part. What it could not fix was Windows: the audio device is opened
+    on the first play, and until it is open a beep is heard noticeably after
+    it was asked for, which put the first one -- the one you are listening
+    for -- late and the next one or two unevenly behind it.
+
+    One buffer has no first play but its own. The gaps are samples rather than
+    sleeps, so the spacing is exact by construction, and the alarm cannot
+    outlast or fall short of the animation because both are SHOWER_MS long.
+    """
+    beep = _beep_samples()
+    period = int(RATE * BEEP_PERIOD_MS / 1000)
+    out = [0.0] * int(RATE * SHOWER_MS / 1000)
+    for at in range(0, len(out), period):
+        out[at:at + len(beep)] = beep[:len(out) - at]
+    return _wav(out)
+
+
+def _hush_wav():
+    """A few milliseconds of nothing, played to open the audio device."""
+    return _wav([0.0] * int(RATE * 0.04))
 
 
 _SOUNDS = {}
@@ -437,45 +472,34 @@ def sweep_stale_sounds():
         shutil.rmtree(path, ignore_errors=True)
 
 
-def play_beep():
-    _play("beep", _beep_wav)
+def play_alarm():
+    _play("alarm", _alarm_wav)
 
 
-def warm_beep():
-    """Render the beep before it is wanted, so the first one is not late.
+def stop_alarm():
+    """Cut the alarm off where it is, for a shower ended early by a click."""
+    try:
+        import winsound
+        winsound.PlaySound(None, winsound.SND_PURGE)
+    except Exception:
+        pass                        # nothing was playing, or nothing can
 
-    The first _play costs about 16 ms it never pays again: synthesising the
-    waveform, making a private temp directory and writing the file. Paid at
-    the finish, that is 16 ms of silence exactly where the beep is supposed
-    to land, so it is paid when the timer starts instead.
+
+def warm_sound():
+    """Render the alarm and open the audio device before either is wanted.
+
+    Building the buffer takes tens of milliseconds and the first play of a
+    run takes more again, as Windows opens the device. Both used to be paid
+    at the finish, in the gap between the clock reading zero and the first
+    beep being heard. They are paid when the timer starts instead: a few
+    milliseconds of silence opens the device exactly as a beep would.
     """
     global _SOUND_ERROR
     try:
-        _sound_file("beep", _beep_wav)
+        _sound_file("alarm", _alarm_wav)
+        _play("hush", _hush_wav)
     except Exception as exc:
         _SOUND_ERROR = exc
-
-
-def alarm(stop):
-    """Beep on the half second until `stop` is set -- that is, until he bursts.
-
-    Each beep is timed against a fixed schedule rather than by sleeping for the
-    gap, so the small overhead of starting a sound cannot pile up and stretch
-    the later gaps.
-    """
-    def run():
-        start = time.monotonic()
-        beat = 0
-        while not stop.is_set():
-            play_beep()
-            beat += 1
-            target = start + beat * BEEP_PERIOD_MS / 1000
-            while not stop.is_set():
-                rest = target - time.monotonic()
-                if rest <= 0:
-                    break
-                time.sleep(min(rest, 0.02))     # so stopping is noticed at once
-    threading.Thread(target=run, daemon=True).start()
 
 
 # ----------------------------------------------------------------- windows
@@ -631,7 +655,6 @@ class Totoro:
         self.dance_seq = 0                  # cancels an animation already in flight
         self.bits = []                      # rain, once the timer is up
         self.shake = (0.0, 0.0)             # how far off his mark he is now
-        self.alarm_stop = threading.Event()
         self.work_text = str(DEFAULT_MINUTES)   # the last focus length run
         self.work_task = ""
         self.pending = None                     # queued, not started
@@ -1015,17 +1038,14 @@ class Totoro:
         button is small and deliberate, and being unable to shut a running
         timer was the worse half of the trade.
 
-        DONE is refused rather than merely undrawn. During the tantrum an
-        alarm thread is beeping and animation frames are queued against the
-        window, and tearing it down underneath them raises from the callback.
-        repaint() draws no button in that state, so this is a guard on a path
-        nothing currently takes.
+        DONE is refused rather than merely undrawn. The alarm is playing and
+        animation frames are queued against the window, and tearing it down
+        underneath them raises from the callback. repaint() draws no button in
+        that state, so this is a guard on a path nothing currently takes.
         """
         if self.state == DONE:
             return
-        stop = getattr(self, "alarm_stop", None)
-        if stop is not None:
-            stop.set()                  # never leave a beep thread running
+        stop_alarm()
         self.root.destroy()
 
     def focus_field(self, which, at=None):
@@ -1094,7 +1114,7 @@ class Totoro:
         self.ends_at = time.monotonic() + self.total
         self.state = RUNNING
         self.draw_wedge(0.0)
-        warm_beep()                 # so the first beep is not 16 ms behind zero
+        warm_sound()                # so the first beep is not behind zero
         self.last_paint = None
 
     def reset_to_standard(self):
@@ -1109,7 +1129,7 @@ class Totoro:
 
     def reset(self):
         self.dance_seq += 1                  # stop any animation in flight
-        self.alarm_stop.set()
+        stop_alarm()
         self.bits = []
         self.canvas.delete("shower")
         self.canvas.itemconfigure(self.disc, fill=DISC_DARK, state="normal")
@@ -1142,8 +1162,7 @@ class Totoro:
         # save_state writes a file, apply_layer and lift are Win32 round
         # trips -- and every one of them used to land between the clock
         # reading zero and the first beep being heard.
-        self.alarm_stop = threading.Event()      # beeps run until the rain stops
-        alarm(self.alarm_stop)
+        play_alarm()
         self.draw_wedge(1.0)
         self.show_me()                          # front and centre, and stays
         if LOG_SESSIONS:                        # off unless aimed at a vault
@@ -1318,12 +1337,13 @@ class Totoro:
         if stamp != self.last_paint:
             self.last_paint = stamp
             self.repaint()
-        # A 200 ms tick is plenty for a clock that counts in seconds, but it
-        # made the finish up to 200 ms late, and the beep is the part you
-        # notice: it arrived after the digits already read 00:00. When the end
-        # is less than one tick away the next tick is aimed at it instead.
-        gap = 200
-        if self.state == RUNNING and 0 < self.left < 0.2:
+        # The tick drives the slice as well as the digits, so it runs at
+        # TICK_MS rather than at the once a second the digits would need.
+        # Even so the finish would be up to a tick late, and the beep is the
+        # part you notice: when the end is less than one tick away, the next
+        # tick is aimed at the end instead of at the usual interval.
+        gap = TICK_MS
+        if self.state == RUNNING and 0 < self.left < TICK_MS / 1000:
             gap = max(1, round(self.left * 1000))
         self.root.after(gap, self.tick)
 
@@ -1501,14 +1521,15 @@ def selftest():
     if os.environ.get("POMODORO_SKIP_AUDIO_CHECK"):
         print("no audio device assumed: skipping the playback check")
     else:
-        play_beep()
-        assert _SOUND_ERROR is None, f"the beep would not play: {_SOUND_ERROR}"
+        play_alarm()
+        stop_alarm()                        # do not beep for four seconds here
+        assert _SOUND_ERROR is None, f"the alarm would not play: {_SOUND_ERROR}"
 
     # a waveform that starts or ends on a jump clicks in the speaker
     import io as _io
     import struct as _struct
     import wave as _wave
-    for label, raw in (("beep", _beep_wav()),):
+    for label, raw in (("beep", _beep_wav()), ("alarm", _alarm_wav())):
         wf = _wave.open(_io.BytesIO(raw))
         cnt = wf.getnframes()
         d = _struct.unpack(f"<{cnt}h", wf.readframes(cnt))
@@ -1521,6 +1542,29 @@ def selftest():
         if label == "beep":
             assert cnt / RATE * 1000 < BEEP_PERIOD_MS, \
                 "the beep outlasts the gap between beeps and will overlap itself"
+
+    # The alarm and the rain are one event, so the buffer has to be exactly as
+    # long as the animation, and the beeps in it exactly BEEP_PERIOD_MS apart.
+    # Both used to depend on a thread hitting a schedule, which a test can only
+    # measure against the wall clock and only loosely; in one buffer they are
+    # sample positions, and can be read off exactly.
+    wf = _wave.open(_io.BytesIO(_alarm_wav()))
+    cnt = wf.getnframes()
+    d = _struct.unpack(f"<{cnt}h", wf.readframes(cnt))
+    assert abs(cnt / RATE * 1000 - SHOWER_MS) < 1.0, (
+        f"the alarm runs {cnt / RATE * 1000:.0f} ms, the rain runs {SHOWER_MS}")
+    want = round(SHOWER_MS / BEEP_PERIOD_MS)
+    period = int(RATE * BEEP_PERIOD_MS / 1000)
+    # A beep begins where sound follows real silence. Testing one sample for
+    # being loud finds four onsets per beep instead of one, because an 880 Hz
+    # tone crosses zero 1760 times a second; the gaps between beeps are the
+    # only place that is quiet for several milliseconds together.
+    hush = int(RATE * 0.009)
+    onsets = [i for i in range(cnt) if d[i] and not any(d[max(0, i - hush):i])]
+    assert len(onsets) == want, f"{len(onsets)} beeps in the alarm, expected {want}"
+    for i, at in enumerate(onsets):
+        off = (at - onsets[0] - i * period) / RATE * 1000
+        assert abs(off) < 1.0, f"beep {i + 1} sits {off:+.1f} ms off its slot"
 
     assert F.text_width("", 3) == 0
     assert F.text_width("AB", 2) == (2 * 6 - 1) * 2

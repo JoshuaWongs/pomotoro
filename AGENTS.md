@@ -77,8 +77,10 @@ POMODORO_SKIP_AUDIO_CHECK=1 python pomodoro.py --selftest
 The waveform maths is still checked; only the call into the sound card is
 skipped.
 
-`test_timer.py` is deliberately **not** run in CI. It measures beep drift
-against the wall clock, and on a shared runner that flakes.
+`test_timer.py` is deliberately **not** run in CI. It opens real windows and
+waits out real animations, and on a shared runner that flakes. The beep spacing
+used to be measured here against the wall clock for the same reason; it is now
+a property of one waveform and is checked exactly in `--selftest`.
 
 ## Layout
 
@@ -115,6 +117,10 @@ parts look wrong and are not. The ones that bite hardest:
 - The beep is measured, not chosen: an 880 Hz square wave, peaking 7 ms in and
   down to a tenth by 90 ms, every 500 ms. Two attempts to improve it by ear
   both landed nearly two octaves too high. Measure before changing it.
+- The alarm is **one buffer** `SHOWER_MS` long, not a beep per `PlaySound`.
+  Windows opens the audio device on the first play of a run, which made the
+  first beep audibly late and the next ones uneven however well the schedule
+  was kept. Do not put the thread back.
 - The clock face, the slice and every letter are canvas items of their own, not
   part of the sprite image. Anything that moves him has to go through
   `rest_at()`, which shifts the `him` tag and `cx`/`cy` by the same delta.
