@@ -51,7 +51,7 @@ DISC_CX, DISC_CY, DISC_R = 22, 47, 11.0     # belly clock, in sprite pixels
 # around a swell: it keeps HEADROOM worth of clear room up and to the left of
 # where he rests, which is the room the rain falls through.
 HEADROOM = 1.2                  # window size as a multiple of the sprite
-SHOWER_MS = 4000                # the shiver and the rain, start to finish
+SHOWER_MS = 3000                # the shiver and the rain, start to finish
 SHOWER_STEP_MS = 45             # 37 frames; any slower and the rain strobes
 SHOWER_RAIN = 46                # streaks falling at any one moment
 

@@ -71,7 +71,7 @@ first second and hits 00:00 exactly as it ends. Rounding down made it drop to
 49:59 the instant it started, which looked broken.
 
 **Finishing.** It comes on to rain. He comes to the front of everything and
-shivers in place for four seconds, the same size throughout, while
+shivers in place for three seconds, the same size throughout, while
 rain falls past him in three depths — the far two behind him, the nearest in
 front, which is what puts him inside the weather rather than in a picture of
 it. The belly keeps its clock face, filled with the spent colour and reading

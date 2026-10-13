@@ -99,7 +99,7 @@ unable to keep still — while rain falls past him in three depths, the nearest
 of it crossing in front of him. His belly keeps the clock face it had a second
 ago, now full of the spent colour and reading `00:00`, so what you walk back to
 still says what it was doing. The clock face shivers with him rather than
-staying pinned where it was. After four seconds the rain thins out, the shiver
+staying pinned where it was. After three seconds the rain thins out, the shiver
 damps with it, he settles back onto his mark, and the next timer is waiting.
 
 A beep sounds every half second for as long as it rains, the first of them on
