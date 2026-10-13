@@ -39,9 +39,13 @@ BASE_SCALE = 4                 # screen pixels per sprite pixel at 100% scaling
 SCALE = BASE_SCALE
 KEY = "#ff00ff"                # magenta stands in for transparent
 
-TICK_MS = 33                    # 30 fps: the clock counts in seconds, but
-                                # the slice around it fills continuously, and
-                                # at the old 200 ms it visibly stepped round
+TICK_MS = 33                    # 30 fps while a timer counts: the digits only
+                                # need a second, but the slice around them
+                                # fills continuously, and at 200 ms it stepped
+TICK_REST_MS = 200              # every other state is a still picture -- the
+                                # shower draws its own frames -- so he stops
+                                # waking the machine 30 times a second to
+                                # redraw something that has not changed
 
 GRID_W, GRID_H = 44, 63
 DISC_CX, DISC_CY, DISC_R = 22, 47, 11.0     # belly clock, in sprite pixels
@@ -1338,12 +1342,14 @@ class Totoro:
         if stamp != self.last_paint:
             self.last_paint = stamp
             self.repaint()
-        # The tick drives the slice as well as the digits, so it runs at
-        # TICK_MS rather than at the once a second the digits would need.
+        # The tick drives the slice as well as the digits, so while a timer
+        # is counting it runs at TICK_MS rather than at the once a second the
+        # digits would need. It is the only state where anything it draws
+        # moves, so it is the only state that pays for the rate.
         # Even so the finish would be up to a tick late, and the beep is the
         # part you notice: when the end is less than one tick away, the next
         # tick is aimed at the end instead of at the usual interval.
-        gap = TICK_MS
+        gap = TICK_MS if self.state == RUNNING else TICK_REST_MS
         if self.state == RUNNING and 0 < self.left < TICK_MS / 1000:
             gap = max(1, round(self.left * 1000))
         # Exactly one tick is ever pending. Scheduling without cancelling was
