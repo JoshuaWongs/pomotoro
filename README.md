@@ -62,8 +62,9 @@ Paste this:
 **Setting a timer.** Click the big number on his belly and type. The cursor
 lands where you clicked, so you can click between the 5 and the 0 of `50` and
 type there. Arrow keys, Home and End move it; Backspace and Delete work either
-side of it. Click the `(task)` line below and type what you are working on,
-then click `START` or press Enter. Nothing blinks until you click into a field.
+side of it. Click the `(task)` line below and type what you are working on, or
+press Tab to jump between the two fields, then click `START` or press Enter.
+Nothing blinks until you click into a field.
 
 **Typing the time.** A plain number means minutes, so `25` is 25 minutes. A dot
 splits minutes from seconds:
@@ -153,22 +154,23 @@ not do this himself** — see below.
 
 Worth saying plainly, since you are being asked to download and run a script:
 
-- No dependencies. 19 standard-library modules and nothing else.
+- No dependencies. 18 standard-library modules and nothing else.
 - **No network access of any kind.** There is no HTTP, socket or URL code in
   the project. It cannot phone home because it has nothing to phone with.
 - No registry writes, no Startup entries, no shortcuts created. If you want him
   at login you make that shortcut yourself.
 - He writes two things and nothing else: `state.json` beside the code, which
   remembers which way his arrow points and can be deleted any time, and the two
-  short sound files, in a private temporary folder made fresh each run. That
+  sound files, in a private temporary folder made fresh each run. That
   folder is deleted when he closes, or, if Windows shut him down first, the
   next time he starts.
 - No `eval`, `exec`, `subprocess` or `pickle` anywhere, and no code is loaded
   at runtime from anywhere.
-- The Windows calls he does make are all through `ctypes`, and all of them are
-  about placing a window: the usable screen area, the display scaling, the
-  stacking order, and a named lock and signal so a second copy calls the first
-  one forward and bows out instead of stacking up in the corner.
+- The Windows calls he makes are of two kinds and nothing else. Through
+  `ctypes`, all about placing a window: the usable screen area, the display
+  scaling, the stacking order, and a named lock and signal so a second copy
+  calls the first one forward and bows out instead of stacking up in the
+  corner. And through `winsound`, to play and stop the alarm file.
 
 Uninstalling is clicking the `X` on his flank, then deleting the folder.
 
@@ -216,22 +218,22 @@ The second has 21 sections and feeds clicks at real on-screen coordinates
 through his click handler: pausing,
 resetting, mashing the buttons in random order, the caret landing where you
 clicked, the progress slice agreeing with the digits to within a twentieth of a
-degree, the beeps not drifting, the shiver never carrying him out of his own
-window, and the rain leaving nothing behind.
+degree, the alarm starting once and never being left playing, the shiver never
+carrying him out of his own window, and the rain leaving nothing behind.
 
 **What the badge covers.** CI runs the self-test on Python 3.9, 3.11, 3.13 and
-3.14 on Windows. It does not run `test_timer.py`, which measures beep timing against
-the wall clock and would flake on a shared machine, and it skips the one check
-that needs a real sound card. Those two run locally.
+3.14 on Windows. It does not run `test_timer.py`, which opens real windows and
+waits out real animations and would flake on a shared machine, and it skips the
+one check that needs a real sound card. Those two run locally.
 
 ## How it is built
 
 [DESIGN.md](DESIGN.md) is the long version: why the progress slice is a polygon
-rather than a pie arc, why the beeps are timed against a fixed schedule, why
-Totoro is drawn in code from ellipses instead of loaded from an image, and the
-list of bugs that each of those decisions exists to prevent.
+rather than a pie arc, why the whole alarm is one waveform rather than a beep
+at a time, why Totoro is drawn in code from ellipses instead of loaded from an
+image, and the list of bugs that each of those decisions exists to prevent.
 
-The short version: about 1400 lines of Python, no dependencies, a hand-drawn
+The short version: about 1600 lines of Python, no dependencies, a hand-drawn
 5x7 pixel font because Windows ships no pixel typeface, and a frameless
 transparent window positioned with Win32 calls through `ctypes`.
 

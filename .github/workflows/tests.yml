@@ -38,6 +38,6 @@ jobs:
           POMODORO_SKIP_AUDIO_CHECK: "1"
         run: python pomodoro.py --selftest
 
-  # test_timer.py is intentionally absent: it measures beep drift against the
-  # wall clock and drives real clicks, which flakes on a shared runner. It is
-  # a local command, documented in the README.
+  # test_timer.py is intentionally absent: it opens real windows, drives real
+  # clicks and waits out real animations, which flakes on a shared runner. It
+  # is a local command, documented in the README.

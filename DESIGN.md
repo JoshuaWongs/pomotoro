@@ -33,7 +33,7 @@ occasionally a file lock landing exactly on a write.
 
 | File | What it is |
 |---|---|
-| pomodoro.py | The whole application, about 1400 lines |
+| pomodoro.py | The whole application, about 1600 lines |
 | font5x7.py | A hand-drawn pixel alphabet, 81 characters |
 | test_timer.py | 21 sections of behaviour tests |
 | totoro.ico | His taskbar icon, generated from the sprite |
@@ -227,10 +227,13 @@ silent, so playback failures are now recorded and asserted in the self-test.
 thread's error code and get_last_error always returns zero. The duplicate-copy
 check depended on reading it, and silently reported "no other copy running".
 
-**Sleeping for the gap makes beeps drift.** Starting a sound costs more than it
-promises, and that error accumulates. Each beep is timed against a fixed
-schedule instead. Measured: the drifting version wandered 358 ms off by the
-sixth beep, the scheduled one stays within 5 ms.
+**Beeps must not be played one at a time.** Sleeping for the gap drifts,
+because starting a sound costs more than it promises and the error
+accumulates: measured, 358 ms off by the sixth beep. Aiming each beep at a
+fixed schedule fixes the drift and not the rest of it -- Windows opens the
+audio device on the first play of a run, so the first beep is heard late and
+the next ones unevenly behind it however well the schedule is kept. The alarm
+is one buffer with the gaps written into it as silence.
 
 **Animations must carry a sequence number.** Pressing a button mid-finish used
 to leave the queued animation frames firing afterwards, parking him off-centre.
@@ -287,15 +290,20 @@ and only shows up on launch.
 test_timer.py has 21 sections and feeds clicks at real on-screen coordinates
 through the click handler. The
 ones worth knowing about: the progress slice must match the clock to within a
-twentieth of a degree and must show colour from the first second; the beeps
-must not drift; the shiver must never carry him outside his own window and must
-settle back onto his mark; he must come back from the rain with nothing left on
-screen and on the right layer; and skipping an offered break must not invert
-the chain.
+twentieth of a degree and must show colour from the first second; the alarm
+must start once and never be left playing; the shiver must never carry him
+outside his own window and must settle back onto his mark; he must come back
+from the rain with nothing left on screen and on the right layer; and skipping
+an offered break must not invert the chain.
 
-Timing-sensitive checks measure cumulative drift rather than gap-to-gap jitter,
-because jitter just measures how busy the machine is. One section retries once
-before failing for the same reason.
+The beep spacing used to be measured here against the wall clock, loosely,
+with one section retrying before it failed because jitter mostly measures how
+busy the machine is. It is now a property of one waveform and `--selftest`
+reads it off the samples exactly, which is both stricter and runs in CI.
+
+Waiting out an animation has to poll well inside its frame: a loop that polled
+every 30 ms against a 45 ms frame serviced about one frame a poll and
+stretched a three second shower past the deadline the same loop had set.
 
 ## Known limits
 
