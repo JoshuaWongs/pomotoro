@@ -345,7 +345,9 @@ while g.state != P.IDLE and P.time.monotonic() < deadline:
     x, y = g.canvas.coords(g.body)
     if (round(x), round(y)) != (g.ox, g.oy):
         moved = True
-    P.time.sleep(0.03)
+    # short against SHOWER_STEP_MS, not near it: polling every 30 ms serviced
+    # about one frame a poll and stretched a 4 s shower past its own deadline
+    P.time.sleep(0.005)
 if not moved:
     note("he never actually shivered off his resting spot")
 if g.state != P.IDLE:
@@ -404,7 +406,7 @@ try:
     deadline = began + P.SHOWER_MS / 1000 + 2.0
     while g.state != P.IDLE and P.time.monotonic() < deadline:
         root.update()
-        P.time.sleep(0.01)
+        P.time.sleep(0.005)
     if len(plays) != 1:
         note(f"the alarm was started {len(plays)} times, expected once")
     if plays and (plays[0] - began) * 1000 > 250:
@@ -495,7 +497,7 @@ def run_to_idle(mins, task=""):
     end = P.time.monotonic() + P.SHOWER_MS / 1000 + 2.5
     while g.state != P.IDLE and P.time.monotonic() < end:
         root.update()
-        P.time.sleep(0.03)
+        P.time.sleep(0.005)
     return g.state == P.IDLE
 
 g.reset_to_standard()

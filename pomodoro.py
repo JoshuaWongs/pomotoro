@@ -655,6 +655,7 @@ class Totoro:
         self.dance_seq = 0                  # cancels an animation already in flight
         self.bits = []                      # rain, once the timer is up
         self.shake = (0.0, 0.0)             # how far off his mark he is now
+        self.tick_id = None                 # the one pending tick, if any
         self.work_text = str(DEFAULT_MINUTES)   # the last focus length run
         self.work_task = ""
         self.pending = None                     # queued, not started
@@ -1345,7 +1346,14 @@ class Totoro:
         gap = TICK_MS
         if self.state == RUNNING and 0 < self.left < TICK_MS / 1000:
             gap = max(1, round(self.left * 1000))
-        self.root.after(gap, self.tick)
+        # Exactly one tick is ever pending. Scheduling without cancelling was
+        # survivable at 200 ms and is not at 33 ms: every direct call to
+        # tick() -- which is how the tests step the clock -- started a second
+        # self-renewing chain, and a few hundred of them between them starve
+        # the event loop of everything else.
+        if self.tick_id is not None:
+            self.root.after_cancel(self.tick_id)    # a fired id cancels fine
+        self.tick_id = self.root.after(gap, self.tick)
 
 
 # -------------------------------------------------------------------- test
