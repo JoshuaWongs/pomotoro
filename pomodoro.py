@@ -1553,7 +1553,10 @@ def selftest():
     d = _struct.unpack(f"<{cnt}h", wf.readframes(cnt))
     assert abs(cnt / RATE * 1000 - SHOWER_MS) < 1.0, (
         f"the alarm runs {cnt / RATE * 1000:.0f} ms, the rain runs {SHOWER_MS}")
-    want = round(SHOWER_MS / BEEP_PERIOD_MS)
+    # ceil, not round: a shower that is not a whole number of periods
+    # long still starts a last beep in the part period, and counting it
+    # as absent would report the wrong number against a real waveform
+    want = math.ceil(SHOWER_MS / BEEP_PERIOD_MS)
     period = int(RATE * BEEP_PERIOD_MS / 1000)
     # A beep begins where sound follows real silence. Testing one sample for
     # being loud finds four onsets per beep instead of one, because an 880 Hz
