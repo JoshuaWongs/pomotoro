@@ -544,9 +544,10 @@ def summon_running_copy():
 def already_running():
     """True if another copy has the widget open.
 
-    He starts from the Startup folder at login, so double-clicking the desktop
-    shortcut later would otherwise leave two of him stacked in the corner,
-    fighting over the same settings file.
+    If you put a shortcut in your Startup folder -- which you do yourself; he
+    creates nothing -- then double-clicking a desktop shortcut later would
+    otherwise leave two of him stacked in the corner, fighting over the same
+    settings file.
     """
     try:
         # use_last_error=True is the whole point: without it ctypes never
@@ -676,9 +677,10 @@ class Totoro:
         self.last_paint = None
         self.pinned = bool(load_state().get("pinned", False))
 
-        # room for the tantrum: he rests at the bottom-right of the window and
-        # swells up and to the left into the transparent padding, so he never
-        # grows off the screen edge.
+        # room for the weather: he rests at the bottom-right of the window
+        # and the transparent padding is up and to the left of him, which is
+        # where the rain falls and the only direction his shiver can carry
+        # him. It was originally sized to hold him at full tantrum size.
         #
         # Ask the renderer how big he really gets rather than working it out
         # again from HEADROOM. The sprite is scaled to a whole number of
@@ -1021,7 +1023,7 @@ class Totoro:
                 self.focus_field("min", self.caret_from_click("min", ev))
             return
         if self.state == DONE:
-            self.reset()                # a click cuts the tantrum short
+            self.reset()                # a click cuts the shower short
             return
         if self.hit(ev, "reset"):
             self.reset_to_standard()
@@ -1481,14 +1483,14 @@ def selftest():
                 closed.clear()
                 w.quit()
                 assert closed, f"the X did not close him while {st}"
-            # during the tantrum he is swelling, an alarm thread is beeping and
-            # animation frames are queued: no button, and quit refuses anyway
+            # while it rains the alarm is playing and animation frames are
+            # queued against the window: no button, and quit refuses anyway
             w.state = DONE
             w.repaint()
-            assert "exit" not in w.hits, "the X must not be drawn mid-tantrum"
+            assert "exit" not in w.hits, "the X must not be drawn in the rain"
             closed.clear()
             w.quit()
-            assert not closed, "the X must not close him mid-tantrum"
+            assert not closed, "the X must not close him in the rain"
         finally:
             root.destroy = real_destroy
             w.state = IDLE
@@ -1583,6 +1585,31 @@ def selftest():
         off = (at - onsets[0] - i * period) / RATE * 1000
         assert abs(off) < 1.0, f"beep {i + 1} sits {off:+.1f} ms off its slot"
 
+    # The Windows-only guard, checked by pretending not to be on Windows. It
+    # has to be the first thing main() does, or --selftest would reach the
+    # duplicate-copy check and fail there instead, which is exactly the
+    # confusing failure the guard exists to replace.
+    # argv and these two stubs send a guard-less main() down the harmless
+    # "a copy is already running, bow out" path, so that if the guard is ever
+    # removed this fails on the assertion below rather than recursing back
+    # into selftest or opening a window.
+    real_platform, real_argv = sys.platform, sys.argv
+    real_running, real_summon = already_running, summon_running_copy
+    try:
+        sys.platform, sys.argv = "darwin", ["pomodoro.py"]
+        globals()["already_running"] = lambda: True
+        globals()["summon_running_copy"] = lambda: None
+        try:
+            main()
+        except SystemExit as exc:
+            assert "Windows" in str(exc),                 f"the guard must say why it stopped, not {str(exc)!r}"
+        else:
+            assert False, "main() must refuse to run anywhere but Windows"
+    finally:
+        sys.platform, sys.argv = real_platform, real_argv
+        globals()["already_running"] = real_running
+        globals()["summon_running_copy"] = real_summon
+
     assert F.text_width("", 3) == 0
     assert F.text_width("AB", 2) == (2 * 6 - 1) * 2
     assert set("0123456789:.- ") <= set(F.GLYPHS), "font missing a clock character"
@@ -1593,6 +1620,16 @@ def selftest():
 
 
 def main():
+    if sys.platform != "win32":
+        # Every Win32 call in this file is wrapped in try/except. On Windows
+        # that is a safety net; anywhere else it is a blindfold, and it let
+        # him start into a broken state rather than not start. On a Mac he
+        # opened a solid opaque box with no transparency, no layering and no
+        # sound, saying nothing about why, and --selftest failed on the
+        # duplicate-copy check as though that check were broken rather than
+        # inapplicable. Refusing up front is the honest answer until there is
+        # a port to point at.
+        sys.exit("Pomotoro is Windows only for now. See the README.")
     if "--selftest" in sys.argv:
         selftest()
         return

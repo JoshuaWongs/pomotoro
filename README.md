@@ -17,8 +17,8 @@ runs out it comes on to rain, and he shivers in it until it passes.
 ## What you need
 
 - **Windows.** The see-through background, the window layering, the sound and
-  the single-copy check are all Windows-specific. He will not run on macOS or
-  Linux.
+  the single-copy check are all Windows-specific. On anything else he refuses
+  to start and says so, rather than opening a broken window.
 - **Python 3.9 or newer.** Windows does not come with it: if typing `python`
   opens the Microsoft Store, it is not installed yet. The installer from
   [python.org](https://www.python.org/downloads/) includes everything needed.
@@ -87,7 +87,9 @@ running. It throws the timer away and puts him back to the standard screen: 50
 minutes, no task. Escape does the same.
 
 **Putting him away.** The small `X` on his left flank, level with the arrow on
-his right, closes him. It works whether or not a timer is running.
+his right, closes him. It works whether or not a timer is running — except
+while it is raining at the end of one, when he has no buttons at all. Click him
+to clear the rain first, or press Return.
 
 It used to be a right-click, which had to go: the close fired on the press, so
 by the time you let the button go the window was already gone and the click

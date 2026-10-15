@@ -18,6 +18,12 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pomodoro as P
 
+if sys.platform != "win32":
+    # Same reason pomodoro.py refuses: this drives real Win32 window layering
+    # and a named mutex, so off Windows it fails on checks that are not wrong,
+    # they are inapplicable. Say that instead of reporting failures.
+    sys.exit("test_timer.py is Windows only, like the widget it tests.")
+
 # a private summon channel, so the copy actually running on the desktop cannot
 # swallow the test's signal -- the event is auto-reset, so only one waiter gets it
 P.SUMMON_EVENT = f"PomodoroTotoro.test.{os.getpid()}"
