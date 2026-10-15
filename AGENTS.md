@@ -14,9 +14,13 @@ corner of the screen with a clock face on his belly. Standard library only.
 There is no setup. No dependencies, no virtualenv, no build step, nothing to
 install.
 
-- **Windows only.** Transparency, window layering, sound and the single-copy
-  check are all Win32. It will not run on macOS or Linux, and making it do so
-  is a rewrite, not a patch.
+- **Windows only**, and it says so rather than half-working: `main()` exits on
+  anything but `win32`, and `test_timer.py` does the same. Keep that check
+  first in `main()` and do not wrap it in `try/except` -- every Win32 call
+  below it is wrapped, which is a safety net on Windows and a blindfold
+  anywhere else. Without the check he opened an opaque box with no
+  transparency and no sound, and `--selftest` failed on the duplicate-copy
+  check as though that check were broken.
 - **Python 3.9 or newer**, with `tkinter`. The Windows installer from
   python.org includes tkinter by default.
 
