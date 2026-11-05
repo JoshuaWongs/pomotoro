@@ -983,7 +983,12 @@ class Totoro:
             heading = (self.task or "focus").upper()[:14]
             self.label(heading, self.cy - 0.50 * R,
                        self.fit(heading, self.cy - 0.50 * R, self.small), TAN)
-            self.label(fmt_clock(self.left), self.cy - 0.16 * R, self.big,
+            # an hour or more reads H:MM:SS, two glyphs wider than MM:SS, so
+            # shrink it to fit and keep it centred on the same line
+            clock = fmt_clock(self.left)
+            mid = self.cy - 0.16 * R + F.H * self.big / 2
+            px = fit_px(clock, R, mid - self.cy, self.big)
+            self.label(clock, mid - F.H * px / 2, px,
                        TAN if self.state == PAUSED else CREAM, bold=True)
             if self.state == PAUSED:
                 self.label("PAUSED", self.cy + 0.44 * R, self.tiny, TAN)
@@ -1424,7 +1429,8 @@ def selftest():
 
     # nothing may spill out of the circle, however long the task name is
     R = DISC_R * 8
-    for text, dyf, px in (("00:00", -0.14, 5), ("COMPLETED", -0.66, 2),
+    for text, dyf, px in (("00:00", -0.14, 5), ("9:59:59", -0.14, 5),
+                          ("COMPLETED", -0.66, 2),
                           ("50 MIN 30 SEC DONE", -0.32, 2),
                           ('"' + "W" * 16 + '"', -0.08, 2),
                           ("W" * 14, -0.54, 2)):
